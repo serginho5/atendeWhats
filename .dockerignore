@@ -1,0 +1,8 @@
+node_modules
+.output
+_deploy_ssh
+_to_delete
+.env
+.env.development
+.env.production
+.git

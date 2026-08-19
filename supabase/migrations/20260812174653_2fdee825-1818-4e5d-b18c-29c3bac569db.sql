@@ -1,0 +1,26 @@
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tg_company_trial_credits() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.tg_fin_auto_receita_on_ganho() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.seed_default_stages() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.seed_fin_categorias(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.consume_ai_credit(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.topup_plan_credits(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.claim_super_admin_if_empty() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_super_admin() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.has_company_role(uuid, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.has_company_access(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.current_company_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.bootstrap_current_user() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.grant_credits(uuid, integer, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fin_enable_for_company(uuid, boolean) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.bootstrap_current_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fin_enable_for_company(uuid, boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_super_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_company_role(uuid, text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_company_access(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_company_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_ai_credit(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.topup_plan_credits(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.seed_fin_categorias(uuid) TO service_role;
