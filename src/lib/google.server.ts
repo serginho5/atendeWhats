@@ -55,6 +55,19 @@ export async function createCalendarEventForCompany(
   }
 
   const calendarId = gi.calendar_id || "primary";
+
+  // Confere conflito de horário antes de criar (evita agendar em cima de outro evento).
+  const fbRes = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ timeMin: data.inicio, timeMax: data.fim, items: [{ id: calendarId }] }),
+  });
+  if (fbRes.ok) {
+    const fb = await fbRes.json();
+    const busy = fb?.calendars?.[calendarId]?.busy;
+    if (Array.isArray(busy) && busy.length > 0) throw new Error("SLOT_OCUPADO");
+  }
+
   const url = new URL(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
   );

@@ -327,26 +327,39 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const { parts, stage, agendar } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
-          // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...]
+          // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...].
+          // Sempre gera uma mensagem de resultado real pro cliente — nunca falha em silêncio,
+          // pra evitar o agente "confirmar" um agendamento que não foi criado de verdade.
           let confirmacaoAgenda: string | null = null;
           if (agendar && googleIntegration?.conectado) {
+            const quando = new Date(agendar.inicio).toLocaleString("pt-BR", {
+              timeZone: "America/Sao_Paulo",
+              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+            });
             try {
-              const { createCalendarEventForCompany } = await import("@/lib/google.server");
-              const ev = await createCalendarEventForCompany(supabaseAdmin, companyId, {
-                titulo: agendar.titulo,
-                inicio: agendar.inicio,
-                fim: agendar.fim,
-                descricao: `Agendado via WhatsApp — ${pushName || number}`,
-              });
-              const quando = new Date(agendar.inicio).toLocaleString("pt-BR", {
-                timeZone: "America/Sao_Paulo",
-                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-              });
-              confirmacaoAgenda = ev.meetLink
-                ? `Prontinho! Reunião confirmada para ${quando}. Link do Google Meet: ${ev.meetLink}`
-                : `Prontinho! Agendado para ${quando}. Já está na nossa agenda ✅`;
+              const { parseJanelaAgendamento, validaHorarioAgendamento } = await import("@/lib/ai-prompt");
+              const janela = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
+              const problema = validaHorarioAgendamento(agendar.inicio, janela);
+              if (problema) {
+                confirmacaoAgenda = `${problema} Nosso horário de agendamento é: ${(cfg as any)?.horarios_disponiveis || "combinado previamente"}. Pode escolher outro horário dentro desse período?`;
+              } else {
+                const { createCalendarEventForCompany } = await import("@/lib/google.server");
+                const ev = await createCalendarEventForCompany(supabaseAdmin, companyId, {
+                  titulo: agendar.titulo,
+                  inicio: agendar.inicio,
+                  fim: agendar.fim,
+                  descricao: `Agendado via WhatsApp — ${pushName || number}`,
+                });
+                confirmacaoAgenda = ev.meetLink
+                  ? `Prontinho! Reunião confirmada para ${quando}. Link do Google Meet: ${ev.meetLink}`
+                  : `Prontinho! Agendado para ${quando}. Já está na nossa agenda ✅`;
+              }
             } catch (e: any) {
               console.error("[agendar]", e?.message);
+              confirmacaoAgenda =
+                e?.message === "SLOT_OCUPADO"
+                  ? `Esse horário (${quando}) acabou de ficar ocupado. Pode escolher outro horário dentro do nosso período de atendimento?`
+                  : `Tive um problema técnico agora pra confirmar esse agendamento — ainda NÃO está marcado. Vou verificar e te retorno em instantes.`;
             }
           }
 

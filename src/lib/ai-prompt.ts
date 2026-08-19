@@ -284,16 +284,23 @@ Se uma frase só já resolve, use UMA parte e pronto (sem o marcador). Nunca mai
 
   if (c.agendamento_ativo && opts?.googleConectado) {
     const nowIso = new Date().toISOString();
+    const segunda = proximaSegunda();
     blocos.push(
       `AGENDAMENTO REAL (Google Agenda conectado):
-Hoje é ${nowIso} (UTC, fuso America/Sao_Paulo). Quando o cliente CONFIRMAR um horário específico (dia + hora) para um serviço agendável, ` +
+Hoje é ${nowIso} (UTC, fuso America/Sao_Paulo). A próxima segunda-feira é ${segunda.br} (${segunda.iso}) — use ESSA data pronta ` +
+        `quando for sugerir "segunda-feira" ao cliente, nunca calcule a data de cabeça.
+Quando for OFERECER um horário (antes do cliente confirmar), respeite estritamente a janela configurada acima em "Janelas disponíveis" ` +
+        `(ex.: se disser "segundas das 9h às 17h", só ofereça segunda-feira, com opções entre 09:00 e 17:00 — nunca outro dia ou horário fora disso).
+Quando o cliente CONFIRMAR um horário específico (dia + hora) para um serviço agendável, ` +
         `na MESMA resposta, em uma nova linha, escreva exatamente:
 [AGENDAR: AAAA-MM-DDTHH:MM | AAAA-MM-DDTHH:MM | título curto]
 A primeira data é o início, a segunda é o fim (use ${c.duracao_padrao || "30 min"} se o cliente não disser). ` +
         `Use o fuso -03:00 nos horários (ex.: 2026-06-20T15:00:00-03:00). Esse marcador é interno e NÃO aparece pro cliente. ` +
         `Só emita o marcador quando o cliente confirmou claramente. Nunca invente horários que o cliente não disse.
-O evento é criado no Google Agenda automaticamente e, quando for reunião online, um link do Google Meet é gerado e enviado ao cliente logo em seguida pelo sistema. ` +
-        `Portanto NUNCA invente ou escreva um link de reunião você mesmo — apenas confirme o dia/hora e diga que vai enviar o link.`,
+IMPORTANTE: nessa mesma mensagem, NÃO diga que já está confirmado/marcado — o agendamento ainda vai ser verificado e criado. ` +
+        `Diga algo como "beleza, vou confirmar esse horário aqui" (tom de "estou processando", não de "já está pronto"). ` +
+        `O sistema, logo em seguida, envia automaticamente a confirmação real (ou avisa se não deu certo) — inclusive o link do Google Meet quando houver. ` +
+        `Portanto NUNCA invente ou escreva você mesmo um link de reunião ou uma frase definitiva de "confirmado".`,
     );
   }
 
@@ -308,6 +315,67 @@ Escolha 1 entre as etapas reais do CRM da empresa listadas acima. ` +
   );
 
   return blocos.filter(Boolean).join("\n\n");
+}
+
+// Calcula a data (America/Sao_Paulo) da próxima segunda-feira a partir de agora.
+// LLMs erram matemática de datas com frequência — por isso calculamos aqui e
+// entregamos pronto no prompt, em vez de pedir pra IA calcular.
+export function proximaSegunda(base: Date = new Date()): { iso: string; br: string } {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
+  const parts = fmt.formatToParts(base);
+  const weekdayShort = parts.find((p) => p.type === "weekday")?.value || "Mon";
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const hojeSemana = weekdayMap[weekdayShort] ?? 1;
+  const diasAteSegunda = ((1 - hojeSemana + 7) % 7) || 7; // sempre a PRÓXIMA segunda (nunca hoje)
+  const alvo = new Date(base.getTime() + diasAteSegunda * 24 * 60 * 60 * 1000);
+  const alvoParts = fmt.formatToParts(alvo);
+  const y = alvoParts.find((p) => p.type === "year")?.value;
+  const m = alvoParts.find((p) => p.type === "month")?.value;
+  const d = alvoParts.find((p) => p.type === "day")?.value;
+  return { iso: `${y}-${m}-${d}`, br: `${d}/${m}/${y}` };
+}
+
+const DIAS_SEMANA: Record<string, number> = {
+  domingo: 0, segunda: 1, terça: 2, terca: 2, quarta: 3, quinta: 4, sexta: 5, sábado: 6, sabado: 6,
+};
+
+export interface JanelaAgendamento { dias: Set<number> | null; horaIni: number | null; horaFim: number | null }
+
+// Extrai dias da semana e faixa de horário de um texto livre tipo
+// "todas as segundas das 9:00 as 17:00". Sem tentar ser um parser perfeito —
+// se não encontrar nada reconhecível, não restringe (fallback permissivo).
+export function parseJanelaAgendamento(texto?: string | null): JanelaAgendamento {
+  const t = (texto || "").toLowerCase();
+  const dias = new Set<number>();
+  for (const [nome, num] of Object.entries(DIAS_SEMANA)) {
+    if (t.includes(nome)) dias.add(num);
+  }
+  const horas = [...t.matchAll(/(\d{1,2})[:h](\d{2})?/g)].map((m) => Number(m[1]) + (m[2] ? Number(m[2]) / 60 : 0));
+  return {
+    dias: dias.size ? dias : null,
+    horaIni: horas.length ? Math.min(...horas) : null,
+    horaFim: horas.length ? Math.max(...horas) : null,
+  };
+}
+
+// Confere se um horário de início (ISO com offset) cai dentro da janela configurada.
+// Retorna null se estiver OK, ou uma mensagem explicando o motivo da recusa.
+export function validaHorarioAgendamento(inicioISO: string, janela: JanelaAgendamento): string | null {
+  const d = new Date(inicioISO);
+  if (isNaN(d.getTime())) return "Não consegui entender essa data/horário.";
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  const parts = fmt.formatToParts(d);
+  const weekdayShort = parts.find((p) => p.type === "weekday")?.value;
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const weekday = weekdayMap[weekdayShort || ""] ?? -1;
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const horaDecimal = hour + minute / 60;
+
+  if (janela.dias && !janela.dias.has(weekday)) return "Esse dia não está no nosso período de agendamento.";
+  if (janela.horaIni != null && horaDecimal < janela.horaIni) return "Esse horário é antes do início do nosso período de atendimento.";
+  if (janela.horaFim != null && horaDecimal >= janela.horaFim) return "Esse horário é depois do fim do nosso período de atendimento.";
+  return null;
 }
 
 export interface AgendarBrief { inicio: string; fim: string; titulo: string; }
