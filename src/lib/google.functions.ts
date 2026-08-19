@@ -41,7 +41,7 @@ export const startGoogleOAuth = createServerFn({ method: "POST" })
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
     url.searchParams.set("include_granted_scopes", "true");
-    url.searchParams.set("scope", "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email");
+    url.searchParams.set("scope", "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email");
     url.searchParams.set("state", state);
     return { ok: true as const, url: url.toString() };
   });
