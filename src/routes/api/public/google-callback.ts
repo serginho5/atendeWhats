@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { verifyState } from "@/lib/google.server";
+import { verifyState, getPublicOrigin } from "@/lib/google.server";
 
 export const Route = createFileRoute("/api/public/google-callback")({
   server: {
@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/public/google-callback")({
         const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
         if (!clientId || !clientSecret) return new Response("oauth not configured", { status: 500 });
 
-        const redirectUri = `${url.protocol}//${url.host}/api/public/google-callback`;
+        const redirectUri = `${getPublicOrigin(request)}/api/public/google-callback`;
         const tokRes = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

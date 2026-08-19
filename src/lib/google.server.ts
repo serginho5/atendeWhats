@@ -1,5 +1,16 @@
 import { createHmac } from "node:crypto";
 
+// Atrás do Traefik, request.url chega como http:// (proxy termina o TLS e
+// encaminha em HTTP puro pro container) — usar isso direto pra montar o
+// redirect_uri quebra a troca do código OAuth com o Google (redirect_uri_mismatch).
+// Os headers X-Forwarded-* refletem o que o navegador realmente usou.
+export function getPublicOrigin(req: Request): string {
+  const h = req.headers;
+  const proto = h.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(req.url).protocol.replace(":", "");
+  const host = h.get("x-forwarded-host")?.split(",")[0]?.trim() || h.get("host") || new URL(req.url).host;
+  return `${proto}://${host}`;
+}
+
 export function signState(payload: string) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback";
   const sig = createHmac("sha256", secret).update(payload).digest("hex").slice(0, 16);
