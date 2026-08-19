@@ -43,7 +43,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
-  async function cta(path: "/entrar" | "/demo/dashboard" | "#planos", plano: string = "pro") {
+  async function cta(path: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) {
     if (path === "#planos") {
       const el = document.getElementById("planos");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -53,11 +53,13 @@ function Landing() {
       try {
         const { data } = await supabase.auth.getUser();
         if (data.user) {
-          window.location.href = `/app/checkout?plano=${plano}`;
+          window.location.href = plano ? `/app/checkout?plano=${plano}` : "/app/dashboard";
           return;
         }
       } catch {}
-      window.location.href = `/entrar?modo=signup&plano=${plano}`;
+      // Sem plano explícito = clique em "Entrar" (usuário já tem conta) → login direto.
+      // Com plano = veio de um botão de cadastro/plano → fluxo de criação de conta.
+      window.location.href = plano ? `/entrar?modo=signup&plano=${plano}` : "/entrar?modo=login";
       return;
     }
     window.location.href = path;
@@ -813,7 +815,7 @@ function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plan
           </p>
           <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <button
-              onClick={() => onCta("/entrar")}
+              onClick={() => onCta("/entrar", "pro")}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-black font-bold text-base sm:text-lg btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >

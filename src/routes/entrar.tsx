@@ -125,6 +125,16 @@ function EntrarPage() {
       return routeAfterAuth();
     }
 
+    // Supabase não retorna erro para e-mail já cadastrado e confirmado (evita
+    // vazar quais e-mails existem) — em vez disso devolve `identities: []`.
+    // É o único jeito confiável de detectar "essa conta já existe".
+    if (signUpData.user && signUpData.user.identities?.length === 0) {
+      setNeedsPassword(true);
+      setLoading(false);
+      toast.message("Já existe uma conta com esse e-mail.", { description: "Digite sua senha para continuar." });
+      return;
+    }
+
     const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: generated });
     setLoading(false);
     if (signInErr) {
