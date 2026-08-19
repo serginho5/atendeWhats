@@ -32,12 +32,27 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const number = remoteJid.split("@")[0];
           const pushName: string | undefined = data?.pushName;
           const msg = data?.message ?? {};
-          const text: string =
+          let text: string =
             msg.conversation ||
             msg.extendedTextMessage?.text ||
             msg.imageMessage?.caption ||
             msg.videoMessage?.caption ||
             "";
+
+          // Mensagem de voz: baixa o áudio na Evolution API e transcreve antes de tratar como texto.
+          if (!text && msg.audioMessage && whatsappMessageId) {
+            try {
+              const { evoGetBase64Media } = await import("@/lib/evolution.server");
+              const media = await evoGetBase64Media(instanceName, whatsappMessageId, remoteJid, fromMe);
+              if (media?.base64) {
+                const { transcribeAudio } = await import("@/lib/lovable-ai.server");
+                text = await transcribeAudio(media.base64, media.mimetype || msg.audioMessage?.mimetype || "audio/ogg");
+              }
+            } catch (e: any) {
+              console.error("[audio-transcribe]", e?.message);
+            }
+          }
+
           if (!text || !text.trim()) return new Response("no text", { status: 200 });
 
           const suppliedToken = new URL(request.url).searchParams.get("t") || request.headers.get("x-webhook-token") || "";

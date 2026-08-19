@@ -176,6 +176,26 @@ export async function evoDelete(instanceName: string) {
   return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
 }
 
+export async function evoGetBase64Media(
+  instanceName: string,
+  messageId: string,
+  remoteJid: string,
+  fromMe: boolean,
+): Promise<{ base64: string; mimetype: string } | null> {
+  try {
+    const data: any = await evo(`/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      json: { message: { key: { id: messageId, remoteJid, fromMe } }, convertToMp4: false },
+    });
+    const base64: string | null = data?.base64 || data?.media || null;
+    if (!base64) return null;
+    const mimetype: string = data?.mimetype || data?.mimeType || "audio/ogg";
+    return { base64, mimetype };
+  } catch {
+    return null;
+  }
+}
+
 export async function evoFetchNumberFromInstance(instanceName: string): Promise<string | null> {
   try {
     const data: any = await evo(`/instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`, {

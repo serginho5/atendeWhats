@@ -42,6 +42,43 @@ export async function lovableAiChat(
   return geminiChat(key, model, messages);
 }
 
+// Transcreve áudio de WhatsApp usando a chave própria da plataforma (Gemini),
+// independente do provedor de IA que a empresa configurou para as respostas —
+// assim funciona pra qualquer empresa sem precisar de chave extra.
+export async function transcribeAudio(base64: string, mimetype: string): Promise<string> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY ausente. Gere uma chave grátis em aistudio.google.com/apikey.");
+  const cleanMime = (mimetype || "audio/ogg").split(";")[0].trim();
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: "Transcreva este áudio em português do Brasil. Responda APENAS com o texto transcrito, sem comentários e sem aspas." },
+              { inline_data: { mime_type: cleanMime, data: base64 } },
+            ],
+          },
+        ],
+      }),
+    },
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Gemini (transcrição): ${res.status} ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts || [])
+    .map((p: any) => p?.text || "")
+    .join("")
+    .trim();
+  return text;
+}
+
 async function geminiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
   const modelId = model.replace(/^google\//, "");
   const systemText = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
