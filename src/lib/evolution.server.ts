@@ -176,6 +176,19 @@ export async function evoDelete(instanceName: string) {
   return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
 }
 
+// Marca a mensagem do cliente como lida — é o que faz os dois tiquinhos dele
+// ficarem azuis no WhatsApp (confirmação de leitura).
+export async function evoMarkAsRead(instanceName: string, remoteJid: string, messageId: string, fromMe: boolean) {
+  try {
+    await evo(`/chat/markMessageAsRead/${encodeURIComponent(instanceName)}`, {
+      method: "POST",
+      json: { readMessages: [{ remoteJid, id: messageId, fromMe }] },
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 export async function evoGetBase64Media(
   instanceName: string,
   messageId: string,

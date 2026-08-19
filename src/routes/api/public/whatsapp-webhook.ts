@@ -68,6 +68,13 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const companyId = (inst as any).company_id as string;
           const userId = (inst as any).user_id as string;
 
+          // Marca como lida assim que confirma que é uma mensagem legítima —
+          // é o que deixa os dois tiquinhos do cliente azuis no WhatsApp dele.
+          if (whatsappMessageId) {
+            const { evoMarkAsRead } = await import("@/lib/evolution.server");
+            void evoMarkAsRead(instanceName, remoteJid, whatsappMessageId, fromMe);
+          }
+
           if (whatsappMessageId) {
             const { data: duplicate } = await (supabaseAdmin as any)
               .from("mensagens")
