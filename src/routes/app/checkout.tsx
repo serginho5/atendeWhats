@@ -13,7 +13,7 @@ import {
 import { createCheckoutCompany } from "@/lib/checkout.functions";
 import { useServerFn } from "@tanstack/react-start";
 
-const ATIVACAO_CENTS = 50000; // R$ 500,00 — implementação, pagamento único
+const ATIVACAO_CENTS = 49900; // R$ 499,00 — implementação, pagamento único
 
 type Search = { plano?: string };
 

@@ -3,7 +3,6 @@ import { brand } from "@/config/brand";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import {
-  Zap,
   Play,
   Check,
   MessageSquareText,
@@ -30,7 +29,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Conecte seu número de WhatsApp em 2 minutos. A IA do Atende+Empresas responde, qualifica e move cada lead no funil automaticamente. Implementação completa por R$ 500.",
+          "Conecte seu número de WhatsApp em 2 minutos. A IA do Atende+Empresas responde, qualifica e move cada lead no funil automaticamente. Implementação completa por R$ 499.",
       },
       { property: "og:title", content: `${brand.name} — WhatsApp + IA + CRM no automático` },
       {
@@ -288,9 +287,7 @@ function Header({
     <header className="lp-header sticky top-0 z-50 backdrop-blur-xl">
       <div className="mx-auto max-w-7xl px-4 sm:px-5 md:px-8 h-[4.5rem] md:h-20 flex items-center justify-between gap-3">
         <a href="/" className="flex items-center gap-2.5">
-          <span className="grid h-10 w-10 md:h-11 md:w-11 place-items-center rounded-2xl btn-glow" style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}>
-            <Zap className="size-5 text-black" strokeWidth={2.6} />
-          </span>
+          <img src="/logo-mascot.svg" alt="" className="h-10 w-10 md:h-11 md:w-11 rounded-2xl btn-glow" />
           <span className="font-brand text-[1.5rem] md:text-[1.7rem] leading-none">
             Atende<span className="text-grad">+Empresas</span>
           </span>
@@ -355,7 +352,7 @@ function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos",
               className="group inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-black font-bold text-[16px] btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >
-              Ativar minha IA — R$ 500
+              Ativar minha IA — R$ 499
               <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
             </button>
             <button
@@ -620,7 +617,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
         "CRM Kanban + IA automática",
         "Suporte por email",
       ],
-      cta: "Ativar por R$ 500",
+      cta: "Ativar por R$ 499",
     },
     {
       slug: "pro",
@@ -637,7 +634,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
         "Suporte prioritário",
       ],
       highlight: true,
-      cta: "Quero o Pro — R$ 500",
+      cta: "Quero o Pro — R$ 499",
       badge: "Economize 2 meses no anual",
     },
     {
@@ -661,7 +658,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
     <section id="planos" className="px-5 md:px-8 py-24 md:py-28">
       <div className="mx-auto max-w-6xl">
         <SectionTitle eyebrow="Planos" title={<>Quanto mais <span className="text-grad">cresce</span>, mais <span className="text-grad">economiza</span>.</>} />
-        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Implementação única de R$ 500 em qualquer plano — nossa equipe configura tudo pra você. Depois, só a mensalidade escolhida.</p>
+        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Implementação única de R$ 499 em qualquer plano — nossa equipe configura tudo pra você. Depois, só a mensalidade escolhida.</p>
         <div className="mt-12 grid md:grid-cols-3 gap-5 items-stretch">
           {plans.map((pl) => (
             <div
@@ -811,7 +808,7 @@ function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plan
             Pare de perder venda no <span className="text-grad">"oi, sumiu"</span>.
           </h2>
           <p className="mt-6 text-white/70 max-w-xl mx-auto text-lg sm:text-xl">
-            Implementação completa por R$ 500 pra ver a IA atendendo seu WhatsApp e fechando lead sozinha.
+            Implementação completa por R$ 499 pra ver a IA atendendo seu WhatsApp e fechando lead sozinha.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <button
@@ -839,9 +836,7 @@ function Footer() {
         <div className="grid gap-10 md:gap-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-2xl btn-glow" style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}>
-                <Zap className="size-4 text-black" strokeWidth={2.6} />
-              </span>
+              <img src="/logo-mascot.svg" alt="" className="h-10 w-10 rounded-2xl btn-glow" />
               <span className="font-brand text-[1.4rem] leading-none">Atende<span className="text-grad">+Empresas</span></span>
             </div>
             <p className="mt-4 text-sm text-white/55 leading-relaxed max-w-xs">
@@ -876,7 +871,7 @@ function Footer() {
         </div>
         <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row gap-3 items-center justify-between text-xs text-white/40">
           <span>© {new Date().getFullYear()} {brand.name}. Todos os direitos reservados.</span>
-          <span>Feito no Brasil com ☕ e WhatsApp.</span>
+          <span>Feito com ❤️ por AW3S.</span>
         </div>
       </div>
     </footer>

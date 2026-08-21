@@ -23,7 +23,7 @@ type Search = { modo?: "login" | "signup"; plano?: string };
 
 type PlanInfo = { nome: string; preco: string };
 
-const ATIVACAO_TEXTO = "R$ 500,00";
+const ATIVACAO_TEXTO = "R$ 499,00";
 
 export const Route = createFileRoute("/entrar")({
   ssr: false,

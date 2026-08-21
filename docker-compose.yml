@@ -3,7 +3,7 @@ services:
     build: .
     labels:
       - traefik.enable=true
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${COMPOSE_PROJECT_NAME}.${TRAEFIK_HOST}`) || Host(`atendemaisempresas.com.br`) || Host(`www.atendemaisempresas.com.br`)
       - traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=websecure
       - traefik.http.routers.${COMPOSE_PROJECT_NAME}.tls.certresolver=letsencrypt
       - traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=3000

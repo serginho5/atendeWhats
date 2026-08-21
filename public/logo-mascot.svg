@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34D982"/>
+      <stop offset="1" stop-color="#15924A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+
+  <!-- mic boom -->
+  <path d="M50 30 Q54 38 46 42 Q40 45 34 43" fill="none" stroke="#123B27" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="34" cy="43" r="2.6" fill="#123B27"/>
+
+  <!-- headset band -->
+  <path d="M15 29 Q32 6 49 29" fill="none" stroke="#123B27" stroke-width="4.2" stroke-linecap="round"/>
+
+  <!-- ear cups -->
+  <rect x="9" y="26" width="9" height="14" rx="4.5" fill="#123B27"/>
+  <rect x="46" y="26" width="9" height="14" rx="4.5" fill="#123B27"/>
+
+  <!-- face -->
+  <circle cx="32" cy="35" r="16" fill="#FFDCB4"/>
+
+  <!-- blush -->
+  <circle cx="22.5" cy="39" r="2.6" fill="#FF9E85" opacity="0.55"/>
+  <circle cx="41.5" cy="39" r="2.6" fill="#FF9E85" opacity="0.55"/>
+
+  <!-- eyes -->
+  <circle cx="25.5" cy="33" r="2.4" fill="#123B27"/>
+  <circle cx="38.5" cy="33" r="2.4" fill="#123B27"/>
+
+  <!-- smile -->
+  <path d="M24 40 Q32 47 40 40" fill="none" stroke="#123B27" stroke-width="2.6" stroke-linecap="round"/>
+</svg>
