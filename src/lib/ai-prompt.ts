@@ -304,6 +304,8 @@ IMPORTANTE: nessa mesma mensagem, NÃO diga que já está confirmado/marcado —
     );
   }
 
+  const stagesGanhoNomes = stages.filter((s) => s.tipo === "ganho").map((s) => s.nome);
+
   blocos.push(
     `AO FINAL DA RESPOSTA, em uma nova linha, escreva exatamente:
 [ESTAGIO: ${stageNames}]
@@ -311,7 +313,12 @@ Escolha 1 entre as etapas reais do CRM da empresa listadas acima. ` +
       (stagesFinaisNomes.length
         ? `Use uma etapa final (${stagesFinaisNomes.join(" / ")}) APENAS se o cliente confirmou (ganho) ou recusou claramente (perda). `
         : "") +
-      `Esse marcador é interno, NÃO aparece pro cliente.`,
+      `Esse marcador é interno, NÃO aparece pro cliente.` +
+      (stagesGanhoNomes.length
+        ? ` Se a etapa escolhida for de ganho (${stagesGanhoNomes.join(" / ")}), escreva também em outra linha:
+[VALOR: 000.00]
+com o valor total combinado da venda em reais (só números e ponto decimal, sem "R$", sem separador de milhar). Use o preço real combinado na conversa ou do catálogo de produtos/planos. Esse marcador também é interno e só deve aparecer junto com uma etapa de ganho.`
+        : ""),
   );
 
   return blocos.filter(Boolean).join("\n\n");
@@ -383,10 +390,12 @@ export interface AgendarBrief { inicio: string; fim: string; titulo: string; }
 export function parseAiOutput(
   raw: string,
   stages?: StageBrief[],
-): { parts: string[]; stage: string | null; agendar: AgendarBrief | null } {
+): { parts: string[]; stage: string | null; agendar: AgendarBrief | null; valor: number | null } {
   let text = raw || "";
   let stage: string | null = null;
+  let stageTipo: StageBrief["tipo"] | null = null;
   let agendar: AgendarBrief | null = null;
+  let valor: number | null = null;
 
   const agMatch = text.match(/\[\s*AGENDAR\s*:\s*([^\]]+)\]/i);
   if (agMatch) {
@@ -406,22 +415,34 @@ export function parseAiOutput(
     const candidate = stageMatch[1].trim().toLowerCase();
     if (stages && stages.length) {
       const found = stages.find((s) => s.nome.toLowerCase() === candidate);
-      if (found) stage = found.nome;
+      if (found) { stage = found.nome; stageTipo = found.tipo ?? null; }
       else {
         const starts = stages.find((s) => candidate.startsWith(s.nome.toLowerCase()));
-        if (starts) stage = starts.nome;
+        if (starts) { stage = starts.nome; stageTipo = starts.tipo ?? null; }
       }
     } else {
       stage = stageMatch[1].trim();
     }
     text = text.replace(stageMatch[0], "").trim();
   }
+
+  const valorMatch = text.match(/\[\s*VALOR\s*:\s*([^\]]+)\]/i);
+  if (valorMatch) {
+    // Só confia no valor quando a etapa marcada é de ganho — evita que a IA
+    // grude um valor em qualquer resposta e ele vaze pro card sem ter fechado.
+    if (stageTipo === "ganho") {
+      const num = Number(valorMatch[1].replace(/[^\d.,]/g, "").replace(",", "."));
+      if (Number.isFinite(num) && num > 0) valor = num;
+    }
+    text = text.replace(valorMatch[0], "").trim();
+  }
+
   const parts = text
     .split(PART_SEPARATOR)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
     .slice(0, 3);
-  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar };
+  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar, valor };
 }
 
 export function classifyStagePromptInstruction(): string {

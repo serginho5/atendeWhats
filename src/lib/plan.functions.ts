@@ -52,18 +52,20 @@ export const createContact = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const { error } = await supabaseAdmin.from("crm_cards").upsert(
-      {
-        company_id: companyId,
-        user_id: context.userId,
-        numero: data.numero,
-        nome: data.nome,
-        status: firstStage?.nome ?? "Conversas",
-        stage_id: firstStage?.id ?? null,
-        ultima_em: new Date().toISOString(),
-      },
-      { onConflict: "company_id,numero" },
-    );
+    const payload = {
+      company_id: companyId,
+      user_id: context.userId,
+      numero: data.numero,
+      nome: data.nome,
+      status: firstStage?.nome ?? "Conversas",
+      stage_id: firstStage?.id ?? null,
+      ultima_em: new Date().toISOString(),
+    };
+    // Sem UNIQUE(company_id, numero) no banco, upsert com onConflict falha
+    // silenciosamente — fazemos update-ou-insert manual usando o `existing` já buscado acima.
+    const { error } = existing
+      ? await supabaseAdmin.from("crm_cards").update(payload).eq("id", existing.id)
+      : await supabaseAdmin.from("crm_cards").insert(payload);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -112,7 +114,7 @@ export const importContacts = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const payload = data.contatos.map((c) => ({
+    const payload = novos.map((c) => ({
       company_id: companyId,
       user_id: context.userId,
       numero: c.numero,
@@ -123,9 +125,12 @@ export const importContacts = createServerFn({ method: "POST" })
     }));
     if (payload.length === 0) return { ok: true, inseridos: 0 };
 
+    // Sem UNIQUE(company_id, numero) no banco, upsert com onConflict falha
+    // silenciosamente — como já filtramos os que existem (`novos`), inserir
+    // direto é seguro e evita depender dessa constraint.
     const { error } = await supabaseAdmin
       .from("crm_cards")
-      .upsert(payload, { onConflict: "company_id,numero" });
+      .insert(payload);
     if (error) throw new Error(error.message);
     return { ok: true, inseridos: novos.length };
   });

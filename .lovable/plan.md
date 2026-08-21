@@ -1,4 +1,4 @@
-## Módulo Financeiro AtendeZap
+## Módulo Financeiro Atende+Empresas
 
 ### Princípios
 

@@ -7,8 +7,10 @@ import {
 } from "recharts";
 import { brand } from "@/config/brand";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { Bot, MessageCircle, Target, DollarSign, Download, Clock, Star } from "lucide-react";
+import { Bot, MessageCircle, Target, DollarSign, Download, Clock, Star, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { usePlanFeatures } from "@/hooks/use-plan-features";
 
 export const Route = createFileRoute("/app/relatorios")({
   head: () => ({ meta: [{ title: `${brand.name} — Relatórios` }] }),
@@ -32,6 +34,7 @@ function rangeOf(p: Period, from?: string, to?: string) {
 function RelatoriosPage() {
   const ctx = Route.useRouteContext();
   const companyId = ctx.company?.id;
+  const { features, loading: loadingPlan } = usePlanFeatures();
   const [period, setPeriod] = useState<Period>("30d");
   const [from, setFrom] = useState(""); const [to, setTo] = useState("");
   const [msgs, setMsgs] = useState<{ created_at: string; direcao: string; autor: string; user_id: string | null }[]>([]);
@@ -162,6 +165,21 @@ function RelatoriosPage() {
     background: "var(--panel)", border: "1px solid var(--hairline)",
     borderRadius: 12, color: "var(--foreground)",
   };
+
+  if (loadingPlan) return null;
+
+  if (!features.relatoriosAvancados) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-display text-[26px] font-extrabold tracking-tight">Relatórios</h1>
+        <Card className="p-10 text-center">
+          <BarChart3 className="size-10 mx-auto mb-3 text-muted-foreground" />
+          <p className="font-medium">Relatórios disponíveis nos planos Pro e Business</p>
+          <p className="text-sm text-muted-foreground">Faça upgrade para ver métricas de atendimento, conversão e CSAT.</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

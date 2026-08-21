@@ -111,7 +111,7 @@ function Onboarding() {
   // Toast pagamento aprovado
   useEffect(() => {
     if (search.checkout === "success") {
-      toast.success("Pagamento validado! 3 dias grátis liberados.");
+      toast.success("Pagamento validado! Sua IA já está ativa.");
     }
   }, [search.checkout]);
 
@@ -153,7 +153,9 @@ function Onboarding() {
       if (!porte) return "Selecione o porte.";
     }
     if (step === 1) {
-      if (!cep.trim() || !cidade.trim() || !estado.trim()) return "Preencha CEP, cidade e estado.";
+      if (!cep.trim()) return "Informe o CEP.";
+      if (!cidade.trim()) return "Informe a cidade.";
+      if (!estado.trim()) return "Informe o estado (UF).";
     }
     return null;
   }
@@ -311,7 +313,7 @@ function Onboarding() {
             </div>
             <div className="grid sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2"><Row label="Cidade"><Input value={cidade} onChange={(e) => setCidade(e.target.value)} /></Row></div>
-              <Row label="Estado (UF)"><Input value={estado} onChange={(e) => setEstado(e.target.value.toUpperCase().slice(0, 2))} placeholder="SP" /></Row>
+              <Row label="Estado (UF)"><Input value={estado} onChange={(e) => setEstado(e.target.value.toUpperCase().slice(0, 2))} placeholder="Ex: SP" /></Row>
             </div>
           </>
         )}
@@ -355,8 +357,8 @@ function Onboarding() {
             </div>
             <h2 className="text-xl font-bold font-display">Tudo certo, {nomeFantasia}!</h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Sua conta está pronta. Você tem <b>3 dias grátis</b> pra explorar tudo.
-              Conecte seu WhatsApp no próximo passo e a IA já começa a atender.
+              Sua conta está pronta e sua IA já está ativa.
+              Conecte seu WhatsApp no próximo passo e ela já começa a atender.
             </p>
           </div>
         )}

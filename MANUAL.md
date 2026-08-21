@@ -1,4 +1,4 @@
-# 📘 Manual do Clonador — AtendeZap AI
+# 📘 Manual do Clonador — Atende+Empresas AI
 
 Guia passo a passo para colocar sua cópia no ar. **Siga na ordem.** Onde tiver bloco `> PROMPT`, **copie e cole no chat do Lovable** exatamente como está.
 

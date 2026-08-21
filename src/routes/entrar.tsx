@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate, Link, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,10 @@ import { brand } from "@/config/brand";
 
 type Search = { modo?: "login" | "signup"; plano?: string };
 
+type PlanInfo = { nome: string; preco: string };
+
+const ATIVACAO_TEXTO = "R$ 500,00";
+
 export const Route = createFileRoute("/entrar")({
   ssr: false,
   head: () => ({ meta: [{ title: `${brand.name} — Começar` }] }),
@@ -38,12 +42,6 @@ export const Route = createFileRoute("/entrar")({
   component: EntrarPage,
 });
 
-const PLAN_LABEL: Record<string, { nome: string; preco: string }> = {
-  starter: { nome: "Starter", preco: "R$ 97/mês" },
-  pro: { nome: "Pro", preco: "R$ 197/mês" },
-  business: { nome: "Business", preco: "R$ 497/mês" },
-};
-
 const emailSchema = z.string().email("E-mail inválido");
 
 function genStrongPassword() {
@@ -60,7 +58,25 @@ function EntrarPage() {
   const [needsPassword, setNeedsPassword] = useState(search.modo === "login");
   const [loading, setLoading] = useState(false);
 
-  const planInfo = search.plano ? PLAN_LABEL[search.plano] : null;
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
+
+  useEffect(() => {
+    if (!search.plano) { setPlanInfo(null); return; }
+    let cancelled = false;
+    supabase
+      .from("plan")
+      .select("slug, nome, preco_cents")
+      .eq("slug", search.plano)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setPlanInfo({
+          nome: data.nome,
+          preco: (data.preco_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) + "/mês",
+        });
+      });
+    return () => { cancelled = true; };
+  }, [search.plano]);
 
   async function routeAfterAuth() {
     const { data: u } = await supabase.auth.getUser();
@@ -202,7 +218,7 @@ function EntrarPage() {
 
             <div className="flex items-center gap-4 pt-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-[color:var(--brand)]" /> LGPD-friendly</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-[color:var(--brand)]" /> Sem cartão p/ testar</span>
+              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-[color:var(--brand)]" /> Pronto em até 48h</span>
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-[color:var(--brand)]" /> Cancele quando quiser</span>
             </div>
           </div>
@@ -246,7 +262,7 @@ function EntrarPage() {
                       <div className="font-display text-lg font-bold">{planInfo.nome}</div>
                       <div className="text-sm font-semibold">{planInfo.preco}</div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">3 dias grátis • cancele antes e não paga nada</div>
+                    <div className="text-xs text-muted-foreground mt-1">Implementação: {ATIVACAO_TEXTO} • pagamento único</div>
                   </div>
                 )}
 
@@ -298,12 +314,12 @@ function EntrarPage() {
                     className="w-full h-12 bg-gradient-brand text-primary-foreground hover:opacity-95 font-semibold text-[14.5px] shadow-[0_8px_24px_-10px_rgba(22,163,74,.6)]"
                   >
                     {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
-                    {needsPassword ? "Entrar e continuar" : planInfo ? "Continuar para o pagamento" : "Criar conta grátis"}
+                    {needsPassword ? "Entrar e continuar" : planInfo ? "Continuar para o pagamento" : "Criar minha conta"}
                   </Button>
 
                   {!needsPassword && (
                     <p className="text-[11.5px] text-muted-foreground text-center pt-1 leading-relaxed">
-                      Sem cartão para começar os <span className="font-semibold text-foreground">3 dias grátis</span>. Cancele quando quiser.
+                      Implementação única de <span className="font-semibold text-foreground">{ATIVACAO_TEXTO}</span>{planInfo ? <> — depois, {planInfo.preco}</> : null}.
                     </p>
                   )}
                 </form>

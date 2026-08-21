@@ -11,7 +11,7 @@ export function TrialBanner({ company }: { company: CompanyRow }) {
       <AlertTriangle className="size-4 shrink-0" />
       <span>
         {days > 0 ? (
-          <>Período de teste — restam <b>{days} {days === 1 ? "dia" : "dias"}</b>. Cadastre seu cartão antes do fim do trial.</>
+          <>Período de teste — restam <b>{days} {days === 1 ? "dia" : "dias"}</b>. Cadastre seu cartão antes do fim do período de teste.</>
         ) : (
           <>Seu período de teste terminou. Ative seu plano para continuar.</>
         )}

@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { toast } from "sonner";
 import { Loader2, Plus, Play, Pause, Trash2, X, Megaphone, Users } from "lucide-react";
 import { brand } from "@/config/brand";
+import { usePlanFeatures } from "@/hooks/use-plan-features";
 
 export const Route = createFileRoute("/app/campanhas")({
   head: () => ({ meta: [{ title: `${brand.name} — Campanhas` }] }),
@@ -36,6 +37,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function CampanhasPage() {
+  const { features, loading: loadingPlan } = usePlanFeatures();
   const list = useServerFn(listCampaigns);
   const save = useServerFn(saveCampaign);
   const remove = useServerFn(deleteCampaign);
@@ -107,6 +109,23 @@ function CampanhasPage() {
       toast.success(`${r.total} destinatários na fila`);
       await refresh();
     } catch (e: any) { toast.error(e?.message ?? "Erro ao iniciar"); }
+  }
+
+  if (loadingPlan) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="size-6 animate-spin" /></div>;
+  }
+
+  if (!features.automacoes) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold flex items-center gap-2"><Megaphone className="size-6" /> Campanhas</h1>
+        <Card className="p-10 text-center">
+          <Megaphone className="size-10 mx-auto mb-3 text-muted-foreground" />
+          <p className="font-medium">Campanhas disponíveis nos planos Pro e Business</p>
+          <p className="text-sm text-muted-foreground">Faça upgrade para disparar mensagens em massa com agendamento e anti-ban.</p>
+        </Card>
+      </div>
+    );
   }
 
   return (

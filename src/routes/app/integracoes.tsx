@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Copy, Webhook, KeyRound, Link2 } from "lucide-react";
 import { brand } from "@/config/brand";
-import { featuresFor } from "@/lib/plan-features";
+import { usePlanFeatures } from "@/hooks/use-plan-features";
 
 export const Route = createFileRoute("/app/integracoes")({
   head: () => ({ meta: [{ title: `${brand.name} — Integrações` }] }),
@@ -39,9 +39,8 @@ const EVENTS = [
 
 function IntegracoesPage() {
   const ctx = Route.useRouteContext();
-  const planSlug = (ctx.company as any)?.plan_slug || "starter";
-  const features = featuresFor(planSlug);
-  const isBusiness = planSlug === "business" || features.apiWebhooks;
+  const { features, loading } = usePlanFeatures();
+  const isBusiness = features.apiWebhooks;
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -57,11 +56,25 @@ function IntegracoesPage() {
           <TabsTrigger value="utm"><Link2 className="size-4 mr-1.5" /> Links UTM</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="webhooks" className="mt-4"><WebhooksTab /></TabsContent>
-        <TabsContent value="api" className="mt-4"><ApiTab isBusiness={isBusiness} /></TabsContent>
+        <TabsContent value="webhooks" className="mt-4">
+          {loading ? <Loader2 className="size-5 animate-spin mx-auto my-10" /> : isBusiness ? <WebhooksTab /> : <BusinessUpsell text="Webhooks de saída disponíveis no plano Business" />}
+        </TabsContent>
+        <TabsContent value="api" className="mt-4">
+          {loading ? <Loader2 className="size-5 animate-spin mx-auto my-10" /> : <ApiTab isBusiness={isBusiness} />}
+        </TabsContent>
         <TabsContent value="utm" className="mt-4"><UtmTab company={ctx.company} /></TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function BusinessUpsell({ text }: { text: string }) {
+  return (
+    <Card className="p-8 text-center">
+      <Webhook className="size-10 mx-auto mb-3 text-muted-foreground" />
+      <p className="font-medium">{text}</p>
+      <p className="text-sm text-muted-foreground">Faça upgrade para liberar esta integração.</p>
+    </Card>
   );
 }
 

@@ -319,11 +319,14 @@ function AddFromWhatsappDialog({ open, onClose, companyId, userId, firstStageId,
   }, [open, companyId]);
 
   async function add(c: any) {
-    const { error } = await supabase.from("crm_cards").upsert({
+    // A lista já exclui números com card existente (existingNumbers), então
+    // inserir direto é seguro — sem UNIQUE(company_id, numero) no banco,
+    // upsert com onConflict falhava silenciosamente aqui.
+    const { error } = await supabase.from("crm_cards").insert({
       company_id: companyId, user_id: userId, numero: c.numero, nome: c.contato_nome,
       status: firstStageNome, stage_id: firstStageId,
       ultima_mensagem: c.texto.slice(0, 240), ultima_em: new Date().toISOString(),
-    }, { onConflict: "company_id,numero" });
+    });
     if (error) return toast.error(error.message);
     toast.success("Adicionado");
     onAdded(); onClose();

@@ -53,23 +53,6 @@ const DEFAULTS: any = {
 };
 
 
-const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
-  gemini: [
-    { value: "google/gemini-flash-latest", label: "Gemini Flash (rápido — grátis)" },
-    { value: "google/gemini-flash-lite-latest", label: "Gemini Flash Lite (econômico)" },
-    { value: "google/gemini-pro-latest", label: "Gemini Pro (mais inteligente — exige billing no Google AI Studio)" },
-  ],
-  openai: [
-    { value: "gpt-4o-mini", label: "GPT-4o mini (rápido e barato)" },
-    { value: "gpt-4o", label: "GPT-4o (premium)" },
-    { value: "gpt-4.1-mini", label: "GPT-4.1 mini" },
-  ],
-  anthropic: [
-    { value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku (rápido)" },
-    { value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet (premium)" },
-  ],
-};
-
 const BUFFER_PRESETS = [3, 5, 10, 20, 30];
 
 interface PersonalidadePreset {
@@ -119,8 +102,6 @@ function AgentePage() {
   const gStart = useServerFn(startGoogleOAuth);
   const gDisc = useServerFn(disconnectGoogle);
   const plan = usePlanFeatures();
-  const allowOpenAI = plan.features.providersIA.includes("openai");
-  const allowAnthropic = plan.features.providersIA.includes("anthropic");
   const allowGoogleCal = plan.features.googleCalendar;
   const [cfg, setCfg] = useState<any>(DEFAULTS);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -232,54 +213,6 @@ function AgentePage() {
 
             <TabsContent value="modelo" className="space-y-3">
               <Section title="Cérebro da IA" icon={<Sparkles className="size-3.5" />}>
-                <div className="space-y-1.5">
-                  <Label>Provedor</Label>
-                  <Select value={cfg.ai_provider} onValueChange={(v) => { up("ai_provider", v); up("ai_model", PROVIDER_MODELS[v]?.[0]?.value || ""); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gemini">Google Gemini — incluso, sem custo extra</SelectItem>
-                      <SelectItem value="openai" disabled={!allowOpenAI}>
-                        OpenAI (GPT) — sua chave{!allowOpenAI ? " · Pro/Business" : ""}
-                      </SelectItem>
-                      <SelectItem value="anthropic" disabled={!allowAnthropic}>
-                        Anthropic (Claude) — sua chave{!allowAnthropic ? " · Pro/Business" : ""}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Gemini é o padrão e já vem incluso. {(!allowOpenAI || !allowAnthropic) && (
-                      <>GPT e Claude exigem o plano Pro. <Link to="/app/checkout" className="underline">Fazer upgrade</Link>.</>
-                    )}
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Modelo</Label>
-                  <Select value={cfg.ai_model} onValueChange={(v) => up("ai_model", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {(PROVIDER_MODELS[cfg.ai_provider] || PROVIDER_MODELS.gemini).map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {cfg.ai_provider === "openai" && (
-                  <div className="space-y-1.5">
-                    <Label>Chave OpenAI (sk-...)</Label>
-                    <Input type="password" value={cfg.openai_api_key} onChange={(e) => up("openai_api_key", e.target.value)} placeholder="sk-..." />
-                    <p className="text-xs text-muted-foreground">Pegue em platform.openai.com → API Keys. A chave fica salva apenas para sua empresa.</p>
-                  </div>
-                )}
-                {cfg.ai_provider === "anthropic" && (
-                  <div className="space-y-1.5">
-                    <Label>Chave Anthropic (sk-ant-...)</Label>
-                    <Input type="password" value={cfg.anthropic_api_key} onChange={(e) => up("anthropic_api_key", e.target.value)} placeholder="sk-ant-..." />
-                    <p className="text-xs text-muted-foreground">Pegue em console.anthropic.com → API Keys.</p>
-                  </div>
-                )}
-
                 <div className="space-y-2 pt-2">
                   <Label>Tempo de espera antes de responder</Label>
                   <p className="text-xs text-muted-foreground">A IA aguarda esse tempo para juntar mensagens enviadas em sequência e responder de uma vez só — parece mais humano.</p>

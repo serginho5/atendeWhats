@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getCompanyPlan } from "@/lib/plan-limits.server";
+import { featuresFor } from "@/lib/plan-features";
 
 async function resolveCompanyId(supabase: any, userId: string): Promise<string> {
   const { data, error } = await supabase
@@ -13,6 +15,13 @@ async function resolveCompanyId(supabase: any, userId: string): Promise<string> 
   if (error) throw error;
   if (!data) throw new Error("Sem empresa.");
   return data.company_id as string;
+}
+
+async function assertCampaignsAllowed(companyId: string) {
+  const plan = await getCompanyPlan(companyId);
+  if (!featuresFor(plan.rawSlug || plan.slug).automacoes) {
+    throw new Error("Campanhas disponíveis nos planos Pro e Business. Faça upgrade para usar.");
+  }
 }
 
 export const listCampaigns = createServerFn({ method: "GET" })
@@ -96,6 +105,7 @@ export const saveCampaign = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
+    await assertCampaignsAllowed(companyId);
     const payload = {
       company_id: companyId,
       created_by: userId,
@@ -135,6 +145,7 @@ export const startCampaign = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
+    await assertCampaignsAllowed(companyId);
     const { data: c } = await supabase.from("campaign").select("*").eq("id", data.id).eq("company_id", companyId).maybeSingle();
     if (!c) throw new Error("Campanha não encontrada.");
     if (c.status === "enviando" || c.status === "agendada") throw new Error("Campanha já está em execução.");

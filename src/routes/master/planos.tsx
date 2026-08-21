@@ -267,9 +267,9 @@ function Field({ label, children, full }: { label: string; children: React.React
 }
 function Limit({ label, v }: { label: string; v: number }) {
   return (
-    <div className="bg-muted/50 rounded-md px-2 py-1.5 flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold">{v.toLocaleString("pt-BR")}</span>
+    <div className="bg-muted/50 rounded-md px-2 py-1.5">
+      <div className="text-muted-foreground truncate">{label}</div>
+      <div className="font-semibold">{v.toLocaleString("pt-BR")}</div>
     </div>
   );
 }

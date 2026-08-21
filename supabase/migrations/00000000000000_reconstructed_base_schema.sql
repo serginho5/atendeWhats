@@ -1,5 +1,5 @@
 -- ============================================================================
--- RECONSTRUÇÃO DO SCHEMA BASE — AtendeZap
+-- RECONSTRUÇÃO DO SCHEMA BASE — Atende+Empresas
 -- Gerado a partir de src/integrations/supabase/types.ts + análise do código,
 -- pois o projeto original (Lovable Cloud) nunca versionou o schema base em
 -- supabase/migrations — só existiam 4 migrations incrementais.

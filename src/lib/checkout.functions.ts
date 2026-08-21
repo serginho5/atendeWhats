@@ -24,28 +24,31 @@ export const createCheckoutCompany = createServerFn({ method: "POST" })
     if (existingErr) throw existingErr;
     if (existing?.company_id) return { companyId: existing.company_id as string };
 
-    // Trial days: do plano escolhido (ou starter como fallback).
-    let trialDays = 3;
+    // Sem trial: a empresa nasce "pendente" e só é liberada quando o pagamento
+    // da implementação (ativação) é confirmado pelo webhook de cobrança.
+    // trial_ate/creditos_resetam_em continuam existindo só como bookkeeping
+    // técnico dos créditos iniciais — não representam mais um período de teste.
     let planSlug = data.plano_slug;
+    let planId: string | null = null;
     if (planSlug) {
       const { data: plan } = await supabaseAdmin
         .from("plan")
-        .select("trial_days, slug")
+        .select("id, slug")
         .eq("slug", planSlug)
         .maybeSingle();
-      if (plan?.trial_days != null) trialDays = Number(plan.trial_days) || trialDays;
+      planId = plan?.id ?? null;
     } else {
       const { data: starter } = await supabaseAdmin
         .from("plan")
-        .select("trial_days, slug")
+        .select("id, slug")
         .eq("slug", "starter")
         .maybeSingle();
-      if (starter?.trial_days != null) trialDays = Number(starter.trial_days) || trialDays;
       planSlug = starter?.slug ?? null;
+      planId = starter?.id ?? null;
     }
 
     const slug = `${slugify(data.nome)}-${Math.random().toString(36).slice(2, 6)}`;
-    const trialAte = new Date(Date.now() + trialDays * 86400000).toISOString();
+    const creditosResetamEm = new Date(Date.now() + 30 * 86400000).toISOString();
 
     const { data: company, error: companyErr } = await supabaseAdmin
       .from("company")
@@ -54,10 +57,10 @@ export const createCheckoutCompany = createServerFn({ method: "POST" })
         slug,
         primary_color: "#25D366",
         created_by: context.userId,
-        status_cobranca: "trial",
+        status_cobranca: "pendente",
         onboarding_completed: false,
         onboarding_step: 0,
-        trial_ate: trialAte,
+        trial_ate: creditosResetamEm,
         selected_plan_slug: planSlug,
       } as any)
       .select("id")
@@ -71,6 +74,19 @@ export const createCheckoutCompany = createServerFn({ method: "POST" })
       ativo: true,
     });
     if (memberErr) throw memberErr;
+
+    // Sem isso, getCompanyPlan() não encontra assinatura e as features/limites
+    // do plano escolhido não valem até o pagamento confirmar (status
+    // "trialing" aqui só significa "assinatura ainda não confirmada" —
+    // getCompanyPlan() a reconhece como válida enquanto aguarda o webhook).
+    if (planId) {
+      const { error: subErr } = await supabaseAdmin.from("subscription").insert({
+        company_id: company.id,
+        plan_id: planId,
+        status: "trialing",
+      });
+      if (subErr) throw subErr;
+    }
 
     return { companyId: company.id as string };
   });

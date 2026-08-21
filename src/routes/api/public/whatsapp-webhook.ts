@@ -346,7 +346,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.error("[ai]", e?.message);
           }
 
-          const { parts, stage, agendar } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
+          const { parts, stage, agendar, valor: valorGanho } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
           // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...].
@@ -421,6 +421,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             finalParts[finalParts.length - 1] || text,
             stages,
             stage,
+            valorGanho,
           );
 
           return new Response("ok", { status: 200 });
@@ -429,7 +430,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           return new Response("error", { status: 200 });
         }
       },
-      GET: async () => new Response("AtendeZap webhook online", { status: 200 }),
+      GET: async () => new Response("Atende+Empresas webhook online", { status: 200 }),
     },
   },
 });
@@ -483,10 +484,11 @@ async function upsertCard(
   ultimaMensagem: string,
   stages: Array<{ id: string; nome: string; tipo: "normal" | "ganho" | "perda" }>,
   proposedStageName?: string | null,
+  proposedValor?: number | null,
 ) {
   const { data: existing } = await admin
     .from("crm_cards")
-    .select("status, nome, stage_id")
+    .select("id, status, nome, stage_id")
     .eq("company_id", companyId)
     .eq("numero", numero)
     .maybeSingle();
@@ -520,8 +522,19 @@ async function upsertCard(
   } else {
     payload.status = "Conversas";
   }
+  // Só grava o valor quando a IA está fechando ganho NESTA resposta (evita
+  // sobrescrever um valor já definido manualmente em turnos seguintes).
+  if (proposed && !isLocked && proposed.tipo === "ganho" && proposedValor != null) {
+    payload.valor = proposedValor;
+  }
 
-  await admin
-    .from("crm_cards")
-    .upsert(payload, { onConflict: "company_id,numero" });
+  // Sem UNIQUE(company_id, numero) no banco, upsert com onConflict falha
+  // silenciosamente (erro 42P10) — por isso fazemos update-ou-insert manual.
+  if (existing?.id) {
+    const { error } = await admin.from("crm_cards").update(payload).eq("id", existing.id);
+    if (error) console.error("[upsertCard] update falhou", error.message);
+  } else {
+    const { error } = await admin.from("crm_cards").insert(payload);
+    if (error) console.error("[upsertCard] insert falhou", error.message);
+  }
 }

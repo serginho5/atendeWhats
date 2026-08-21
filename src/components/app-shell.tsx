@@ -13,6 +13,7 @@ import { MobileBottomNav, type MobileNavItem } from "@/components/mobile-bottom-
 import { toast } from "sonner";
 import type { CompanyRow, Membership } from "@/lib/tenant";
 import { useWhatsappStatus } from "@/hooks/use-whatsapp-status";
+import { featuresFor } from "@/lib/plan-features";
 
 type NavItem = {
   to: string;
@@ -166,6 +167,7 @@ export function AppShell({
 function Sidebar({
   loc, company, isSuperAdmin, isAdmin, primary, userName, email, roleLabel, signOut,
 }: any) {
+  const hasFinanceiro = featuresFor(company?.selected_plan_slug).financeiro;
   return (
     <aside className="hidden md:flex w-[260px] min-h-screen border-r border-[color:var(--hairline)] bg-[color:var(--sidebar-bg)] flex-col">
       <div className="px-5 py-5 flex items-center gap-3 border-b border-[color:var(--hairline)]">
@@ -192,9 +194,12 @@ function Sidebar({
               {sec.label}
             </div>
             <div className="flex flex-col gap-1">
-              {sec.items.filter((i) => !i.adminOnly || isAdmin).map((item) => (
-                <NavLink key={item.to} item={item} active={loc.pathname.startsWith(item.to)} primary={primary} />
-              ))}
+              {sec.items.filter((i) => !i.adminOnly || isAdmin).map((item) => {
+                const tag = item.to === "/app/financeiro" && hasFinanceiro ? undefined : item.tag;
+                return (
+                  <NavLink key={item.to} item={{ ...item, tag }} active={loc.pathname.startsWith(item.to)} primary={primary} />
+                );
+              })}
             </div>
           </div>
         ))}

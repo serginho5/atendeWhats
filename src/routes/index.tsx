@@ -30,7 +30,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Conecte seu número de WhatsApp em 2 minutos. A IA do AtendeZap responde, qualifica e move cada lead no funil automaticamente. 3 dias grátis para testar.",
+          "Conecte seu número de WhatsApp em 2 minutos. A IA do Atende+Empresas responde, qualifica e move cada lead no funil automaticamente. Implementação completa por R$ 500.",
       },
       { property: "og:title", content: `${brand.name} — WhatsApp + IA + CRM no automático` },
       {
@@ -292,7 +292,7 @@ function Header({
             <Zap className="size-5 text-black" strokeWidth={2.6} />
           </span>
           <span className="font-brand text-[1.5rem] md:text-[1.7rem] leading-none">
-            Atende<span className="text-grad">Zap</span>
+            Atende<span className="text-grad">+Empresas</span>
           </span>
         </a>
         <nav className="hidden md:flex items-center gap-8 text-[15px] font-semibold text-white/70">
@@ -355,7 +355,7 @@ function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos",
               className="group inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-black font-bold text-[16px] btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >
-              Começar 3 dias grátis
+              Ativar minha IA — R$ 500
               <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
             </button>
             <button
@@ -367,7 +367,7 @@ function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos",
           </div>
 
           <ul className="mt-7 flex flex-wrap justify-center lg:justify-start gap-x-5 gap-y-2 text-sm text-white/65 font-medium">
-            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> 3 dias grátis</li>
+            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Implementação em até 48h</li>
             <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Conecta em 2 minutos</li>
             <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Cancele quando quiser</li>
           </ul>
@@ -409,7 +409,7 @@ function PhoneMock() {
               A
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold truncate">AtendeZap • IA</div>
+              <div className="text-sm font-semibold truncate">Atende+Empresas • IA</div>
               <div className="text-[10px] text-[#25D366] flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-[#25D366]" /> online agora
               </div>
@@ -523,7 +523,7 @@ function Pain() {
         </h2>
         <p className="mt-6 text-lg md:text-xl text-white/65 leading-relaxed">
           A primeira empresa a responder vende. Sempre. Enquanto você está dirigindo, atendendo na loja
-          ou dormindo, os leads do anúncio que você pagou estão sumindo na fila. O AtendeZap responde
+          ou dormindo, os leads do anúncio que você pagou estão sumindo na fila. O Atende+Empresas responde
           em segundos, qualifica e já te entrega o lead pronto pra fechar.
         </p>
       </div>
@@ -617,10 +617,10 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
         "1 usuário",
         "1.500 conversas/mês",
         "1.000 contatos",
-        "CRM Kanban + IA Gemini",
+        "CRM Kanban + IA automática",
         "Suporte por email",
       ],
-      cta: "Começar 3 dias grátis",
+      cta: "Ativar por R$ 500",
     },
     {
       slug: "pro",
@@ -632,12 +632,12 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
         "5 usuários no painel",
         "6.000 conversas/mês",
         "5.000 contatos",
-        "IA Gemini + GPT + Claude",
+        "IA que aprende seu negócio",
         "Google Agenda + Relatórios",
         "Suporte prioritário",
       ],
       highlight: true,
-      cta: "Quero o Pro — 3 dias grátis",
+      cta: "Quero o Pro — R$ 500",
       badge: "Economize 2 meses no anual",
     },
     {
@@ -661,7 +661,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
     <section id="planos" className="px-5 md:px-8 py-24 md:py-28">
       <div className="mx-auto max-w-6xl">
         <SectionTitle eyebrow="Planos" title={<>Quanto mais <span className="text-grad">cresce</span>, mais <span className="text-grad">economiza</span>.</>} />
-        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Todos os planos têm 3 dias grátis. Cancele antes do fim do trial e não é cobrado.</p>
+        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Implementação única de R$ 500 em qualquer plano — nossa equipe configura tudo pra você. Depois, só a mensalidade escolhida.</p>
         <div className="mt-12 grid md:grid-cols-3 gap-5 items-stretch">
           {plans.map((pl) => (
             <div
@@ -703,7 +703,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
             </div>
           ))}
         </div>
-        <p className="mt-5 text-center text-xs text-white/40">Cartão é exigido apenas para liberar o trial. Cancele em até 3 dias e não pagamos nada.</p>
+        <p className="mt-5 text-center text-xs text-white/40">Pagamento seguro via Kiwify. Cancele a mensalidade quando quiser.</p>
       </div>
     </section>
   );
@@ -811,7 +811,7 @@ function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plan
             Pare de perder venda no <span className="text-grad">"oi, sumiu"</span>.
           </h2>
           <p className="mt-6 text-white/70 max-w-xl mx-auto text-lg sm:text-xl">
-            3 dias grátis pra ver a IA atendendo seu WhatsApp e fechando lead sozinha. Cancele antes e não paga nada.
+            Implementação completa por R$ 500 pra ver a IA atendendo seu WhatsApp e fechando lead sozinha.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <button
@@ -819,7 +819,7 @@ function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plan
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-black font-bold text-base sm:text-lg btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >
-              Começar agora, de graça <ArrowRight className="size-5" />
+              Ativar minha IA agora <ArrowRight className="size-5" />
             </button>
             <button onClick={() => onCta("/demo/dashboard")} className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl glass-strong text-white hover:bg-white/10 text-base sm:text-lg font-medium">
               <Play className="size-4" /> Ver demonstração
@@ -842,7 +842,7 @@ function Footer() {
               <span className="grid h-10 w-10 place-items-center rounded-2xl btn-glow" style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}>
                 <Zap className="size-4 text-black" strokeWidth={2.6} />
               </span>
-              <span className="font-brand text-[1.4rem] leading-none">Atende<span className="text-grad">Zap</span></span>
+              <span className="font-brand text-[1.4rem] leading-none">Atende<span className="text-grad">+Empresas</span></span>
             </div>
             <p className="mt-4 text-sm text-white/55 leading-relaxed max-w-xs">
               IA que atende seu WhatsApp 24h, qualifica e organiza o CRM sozinha. Você só fecha.
