@@ -56,6 +56,7 @@ import { Route as MasterEmpresasRouteImport } from './routes/master/empresas'
 import { Route as MasterNovaEmpresaRouteImport } from './routes/master/nova-empresa'
 import { Route as MasterPainelRouteImport } from './routes/master/painel'
 import { Route as MasterPlanosRouteImport } from './routes/master/planos'
+import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth-email-hook'
 import { Route as ApiPublicGoogleCallbackRouteImport } from './routes/api/public/google-callback'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
 import { Route as ApiPublicBillingWebhookRouteImport } from './routes/api/public/billing/webhook'
@@ -297,6 +298,11 @@ const MasterPlanosRoute = MasterPlanosRouteImport.update({
   path: '/planos',
   getParentRoute: () => MasterRoute,
 } as any)
+const ApiPublicAuthEmailHookRoute = ApiPublicAuthEmailHookRouteImport.update({
+  id: '/api/public/auth-email-hook',
+  path: '/api/public/auth-email-hook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicGoogleCallbackRoute = ApiPublicGoogleCallbackRouteImport.update({
   id: '/api/public/google-callback',
   path: '/api/public/google-callback',
@@ -373,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/master/planos': typeof MasterPlanosRoute
   '/demo/': typeof DemoIndexRoute
   '/master/': typeof MasterIndexRoute
+  '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
@@ -425,6 +432,7 @@ export interface FileRoutesByTo {
   '/master/planos': typeof MasterPlanosRoute
   '/demo': typeof DemoIndexRoute
   '/master': typeof MasterIndexRoute
+  '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
@@ -480,6 +488,7 @@ export interface FileRoutesById {
   '/master/planos': typeof MasterPlanosRoute
   '/demo/': typeof DemoIndexRoute
   '/master/': typeof MasterIndexRoute
+  '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
@@ -536,6 +545,7 @@ export interface FileRouteTypes {
     | '/master/planos'
     | '/demo/'
     | '/master/'
+    | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
@@ -588,6 +598,7 @@ export interface FileRouteTypes {
     | '/master/planos'
     | '/demo'
     | '/master'
+    | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
@@ -642,6 +653,7 @@ export interface FileRouteTypes {
     | '/master/planos'
     | '/demo/'
     | '/master/'
+    | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
@@ -662,6 +674,7 @@ export interface RootRouteChildren {
   TermosRoute: typeof TermosRoute
   TrocarSenhaRoute: typeof TrocarSenhaRoute
   CsatTokenRoute: typeof CsatTokenRoute
+  ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
   ApiPublicGoogleCallbackRoute: typeof ApiPublicGoogleCallbackRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicBillingWebhookRoute: typeof ApiPublicBillingWebhookRoute
@@ -1000,6 +1013,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MasterPlanosRouteImport
       parentRoute: typeof MasterRoute
     }
+    '/api/public/auth-email-hook': {
+      id: '/api/public/auth-email-hook'
+      path: '/api/public/auth-email-hook'
+      fullPath: '/api/public/auth-email-hook'
+      preLoaderRoute: typeof ApiPublicAuthEmailHookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/google-callback': {
       id: '/api/public/google-callback'
       path: '/api/public/google-callback'
@@ -1146,6 +1166,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermosRoute: TermosRoute,
   TrocarSenhaRoute: TrocarSenhaRoute,
   CsatTokenRoute: CsatTokenRoute,
+  ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
   ApiPublicGoogleCallbackRoute: ApiPublicGoogleCallbackRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicBillingWebhookRoute: ApiPublicBillingWebhookRoute,
