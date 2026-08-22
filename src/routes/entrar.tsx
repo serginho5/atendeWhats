@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  MessageSquareText,
   Sparkles,
   Loader2,
   Bot,
@@ -191,9 +190,7 @@ function EntrarPage() {
 
           <div className="space-y-8 max-w-lg">
             <div className="flex items-center gap-3">
-              <div className="size-12 rounded-2xl grid place-items-center bg-gradient-brand text-primary-foreground shadow-[0_10px_30px_-10px_rgba(22,163,74,.6)] ring-1 ring-white/20">
-                <MessageSquareText className="size-6" strokeWidth={2.4} />
-              </div>
+              <img src="/logo-mascot.svg" alt="" className="size-12 rounded-2xl shadow-[0_10px_30px_-10px_rgba(22,163,74,.6)] ring-1 ring-white/20" />
               <div>
                 <div className="font-display font-extrabold text-2xl text-gradient-brand leading-none">{brand.name}</div>
                 <div className="text-[12px] text-muted-foreground mt-1">{brand.tagline}</div>
@@ -236,9 +233,7 @@ function EntrarPage() {
               <ArrowLeft className="size-4" /> voltar
             </Link>
             <div className="flex items-center gap-2">
-              <div className="size-9 rounded-xl grid place-items-center bg-gradient-brand text-primary-foreground shadow-md">
-                <MessageSquareText className="size-4" />
-              </div>
+              <img src="/logo-mascot.svg" alt="" className="size-9 rounded-xl shadow-md" />
               <div className="font-display font-bold text-[15px] text-gradient-brand">{brand.name}</div>
             </div>
           </div>
