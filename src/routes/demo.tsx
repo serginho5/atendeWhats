@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, Link, useLocation } from "@tanstack/react-router";
 import { brand } from "@/config/brand";
 import {
-  Sparkles, LayoutDashboard, Inbox, KanbanSquare, Bot, Zap, LogIn,
+  Sparkles, LayoutDashboard, Inbox, KanbanSquare, Bot, LogIn,
   Contact, BarChart3, Smartphone, Users, Settings, Megaphone, Plug, Wallet,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -73,12 +73,7 @@ function DemoLayout() {
 
       {/* Mobile brand bar */}
       <div className="md:hidden flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--hairline)]">
-        <div
-          className="size-8 rounded-lg grid place-items-center text-primary-foreground shrink-0"
-          style={{ background: `linear-gradient(135deg, ${PRIMARY}, var(--brand-strong))` }}
-        >
-          <Zap className="size-4" strokeWidth={2.5} />
-        </div>
+        <img src="/logo-mascot.svg" alt={brand.name} className="size-8 rounded-lg shrink-0" />
         <div className="min-w-0">
           <div className="font-display font-bold tracking-tight text-[14.5px] leading-none truncate">{brand.name}</div>
           <div className="text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground truncate mt-0.5">Demo · Clínica de Estética</div>
@@ -88,12 +83,7 @@ function DemoLayout() {
       <div className="flex flex-1 flex-col md:flex-row">
         <aside className="hidden md:flex w-[260px] min-h-screen border-r border-[color:var(--hairline)] bg-[color:var(--sidebar-bg)] flex-col">
           <div className="px-5 py-5 flex items-center gap-3 border-b border-[color:var(--hairline)]">
-            <div
-              className="size-10 rounded-xl grid place-items-center text-primary-foreground shadow-md ring-1 ring-[color:var(--hairline)]"
-              style={{ background: `linear-gradient(135deg, ${PRIMARY}, var(--brand-strong))` }}
-            >
-              <Zap className="size-5" strokeWidth={2.5} />
-            </div>
+            <img src="/logo-mascot.svg" alt={brand.name} className="size-10 rounded-xl shadow-md ring-1 ring-[color:var(--hairline)]" />
             <div className="min-w-0">
               <div className="font-display font-extrabold tracking-tight truncate text-[16px]">{brand.name}</div>
               <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground truncate -mt-0.5">DEMO · Clínica Vitalis</div>
