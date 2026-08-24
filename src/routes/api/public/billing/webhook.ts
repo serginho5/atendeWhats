@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { normalize, type NormalizedBillingEvent } from "@/lib/billing/normalize";
-import { renderAuthEmail } from "@/lib/email/templates";
+import { renderWelcomeEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/send";
 import { slugify } from "@/lib/tenant";
 
@@ -59,22 +59,27 @@ function defaultCompanyName(email: string): string {
 // Supabase, que já devolve um link pra definir senha), a empresa já ativa e
 // manda o e-mail de boas-vindas com a cara do sistema (mesmo template usado
 // pelo hook de auth em src/routes/api/public/auth-email-hook.ts).
+function generateTempPassword(): string {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 14) + "Aa1!";
+}
+
 async function provisionCompanyFromPurchase(
   supabase: any,
   evt: NormalizedBillingEvent,
 ): Promise<{ companyId: string } | { error: string }> {
   const email = evt.buyerEmail!;
   const siteUrl = process.env.SITE_URL || "https://atendemaisempresas.com.br";
+  const password = generateTempPassword();
 
-  const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-    type: "invite",
+  const { data: created, error: createErr } = await supabase.auth.admin.createUser({
     email,
-    options: { redirectTo: `${siteUrl}/reset-senha` },
+    password,
+    email_confirm: true,
   });
-  if (linkErr || !linkData?.user) {
-    return { error: `falha ao criar usuário: ${linkErr?.message || "sem usuário retornado"}` };
+  if (createErr || !created?.user) {
+    return { error: `falha ao criar usuário: ${createErr?.message || "sem usuário retornado"}` };
   }
-  const userId = linkData.user.id as string;
+  const userId = created.user.id as string;
 
   const planId = await findPlanByRef(supabase, evt.productRef);
   let planSlug: string | null = null;
@@ -125,11 +130,13 @@ async function provisionCompanyFromPurchase(
   }
 
   try {
-    const actionLink = linkData.properties?.action_link;
-    if (actionLink) {
-      const { subject, html } = renderAuthEmail("invite", actionLink);
-      await sendEmail(email, subject, html);
-    }
+    const { subject, html } = renderWelcomeEmail({
+      nome: evt.buyerName,
+      email,
+      password,
+      loginUrl: `${siteUrl}/entrar`,
+    });
+    await sendEmail(email, subject, html);
   } catch (e: any) {
     console.error("[billing.webhook] empresa criada, mas falha ao enviar e-mail de boas-vindas:", e?.message || e);
   }

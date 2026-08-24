@@ -100,3 +100,31 @@ export function renderAuthEmail(kind: EmailKind, verifyUrl: string): { subject: 
       };
   }
 }
+
+// E-mail de boas-vindas mandado pelo webhook de cobrança (não pelo hook de
+// auth) quando a primeira compra aprovada provisiona a conta — ver
+// provisionCompanyFromPurchase em src/routes/api/public/billing/webhook.ts.
+// Diferente dos e-mails acima, não usa link mágico de verificação: mostra
+// e-mail + senha de acesso direto e manda a pessoa pra tela de login normal.
+export function renderWelcomeEmail(opts: { nome: string | null; email: string; password: string; loginUrl: string }): { subject: string; html: string } {
+  const primeiroNome = opts.nome?.trim().split(/\s+/)[0] || null;
+  const saudacao = primeiroNome ? `Oi, ${primeiroNome}! 🎉` : "Oi! 🎉";
+  return {
+    subject: `Seu acesso ao ${BRAND_NAME} está pronto`,
+    html: shell("Bem-vindo", `
+      <h1 style="margin:0 0 12px;font-size:22px;color:#111827;">${saudacao}</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">Seu pagamento foi confirmado e sua conta no ${BRAND_NAME} já está pronta. É só entrar com os dados abaixo pra começar:</p>
+      <table role="presentation" width="100%" cellPadding="0" cellSpacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;margin:0 0 24px;">
+        <tr>
+          <td style="padding:18px 20px;">
+            <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#6b7280;">Seus dados de acesso</p>
+            <p style="margin:0 0 8px;font-size:14.5px;color:#111827;"><b>E-mail:</b> <span style="font-family:monospace;">${opts.email}</span></p>
+            <p style="margin:0;font-size:14.5px;color:#111827;"><b>Senha:</b> <span style="font-family:monospace;">${opts.password}</span></p>
+          </td>
+        </tr>
+      </table>
+      <p style="text-align:center;margin:0 0 20px;">${button("Entrar na minha conta", opts.loginUrl)}</p>
+      <p style="margin:0;font-size:12.5px;line-height:1.6;color:#6b7280;">Assim que entrar, se quiser, você pode trocar essa senha em <b>Configurações → Segurança</b>.</p>
+    `),
+  };
+}
