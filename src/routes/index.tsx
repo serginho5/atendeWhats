@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { brand } from "@/config/brand";
+import { brand, supportWhatsappUrl } from "@/config/brand";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import {
@@ -42,7 +42,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
-  async function cta(path: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) {
+  async function cta(path: "/entrar" | "/demo/dashboard" | "#planos") {
     if (path === "#planos") {
       const el = document.getElementById("planos");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -52,16 +52,40 @@ function Landing() {
       try {
         const { data } = await supabase.auth.getUser();
         if (data.user) {
-          window.location.href = plano ? `/app/checkout?plano=${plano}` : "/app/dashboard";
+          window.location.href = "/app/dashboard";
           return;
         }
       } catch {}
-      // Sem plano explícito = clique em "Entrar" (usuário já tem conta) → login direto.
-      // Com plano = veio de um botão de cadastro/plano → fluxo de criação de conta.
-      window.location.href = plano ? `/entrar?modo=signup&plano=${plano}` : "/entrar?modo=login";
+      window.location.href = "/entrar";
       return;
     }
     window.location.href = path;
+  }
+
+  // Checkout é direto na Kiwify — a conta só nasce depois que o pagamento é
+  // confirmado (ver webhook em src/routes/api/public/billing/webhook.ts), não
+  // existe mais tela de auto-cadastro antes de pagar.
+  const [checkoutUrls, setCheckoutUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    supabase.from("plan").select("slug, checkout_url").eq("ativo", true).then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((p: any) => { if (p.checkout_url) map[p.slug] = p.checkout_url; });
+      setCheckoutUrls(map);
+    });
+  }, []);
+
+  function selectPlan(slug: string) {
+    if (slug === "business") {
+      window.open(supportWhatsappUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const url = checkoutUrls[slug];
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      // Checkout ainda não configurado pro plano — fallback pra falar direto com suporte.
+      window.open(supportWhatsappUrl, "_blank", "noopener,noreferrer");
+    }
   }
 
   useScrollReveal();
@@ -95,10 +119,10 @@ function Landing() {
         <Pain />
         <HowItWorks />
         <Features />
-        <Pricing onCta={cta} />
+        <Pricing onCta={cta} onSelectPlan={selectPlan} />
         <Testimonials />
         <Faq />
-        <FinalCta onCta={cta} />
+        <FinalCta onCta={cta} onSelectPlan={selectPlan} />
         <Footer />
       </div>
 
@@ -279,7 +303,7 @@ function Header({
   isDark,
   onToggleTheme,
 }: {
-  onCta: (p: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) => void;
+  onCta: (p: "/entrar" | "/demo/dashboard" | "#planos") => void;
   isDark: boolean;
   onToggleTheme: () => void;
 }) {
@@ -326,7 +350,7 @@ function Header({
 
 
 /* ===================== HERO ===================== */
-function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) => void }) {
+function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos") => void }) {
   return (
     <section className="relative px-4 sm:px-6 md:px-8 pt-12 md:pt-28 pb-16 md:pb-24">
       <div className="absolute inset-0 grid-bg [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_70%)] opacity-40 pointer-events-none" />
@@ -602,7 +626,7 @@ function Features() {
 }
 
 /* ===================== PRICING ===================== */
-function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) => void }) {
+function Pricing({ onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos") => void; onSelectPlan: (slug: string) => void }) {
   const plans = [
     {
       slug: "starter",
@@ -689,7 +713,7 @@ function Pricing({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plano
                 ))}
               </ul>
               <button
-                onClick={() => onCta("/entrar", pl.slug)}
+                onClick={() => onSelectPlan(pl.slug)}
                 className={`mt-7 w-full px-4 py-3 rounded-xl font-semibold transition ${
                   pl.highlight ? "text-black btn-glow" : "glass-strong text-white hover:bg-white/10"
                 }`}
@@ -789,7 +813,7 @@ function Faq() {
 }
 
 /* ===================== FINAL CTA ===================== */
-function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos", plano?: string) => void }) {
+function FinalCta({ onCta, onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos") => void; onSelectPlan: (slug: string) => void }) {
   return (
     <section className="px-4 sm:px-5 md:px-8 py-20 md:py-28">
       <div
@@ -812,7 +836,7 @@ function FinalCta({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#plan
           </p>
           <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <button
-              onClick={() => onCta("/entrar", "pro")}
+              onClick={() => onSelectPlan("pro")}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-black font-bold text-base sm:text-lg btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >

@@ -65,9 +65,9 @@ function DemoLayout() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <Link to="/entrar" className="text-[12.5px] md:text-sm font-semibold px-3 py-1.5 rounded-md bg-gradient-brand text-primary-foreground hover:opacity-90 whitespace-nowrap">
-            Criar conta
-          </Link>
+          <a href="/#planos" className="text-[12.5px] md:text-sm font-semibold px-3 py-1.5 rounded-md bg-gradient-brand text-primary-foreground hover:opacity-90 whitespace-nowrap">
+            Ver planos
+          </a>
         </div>
       </header>
 

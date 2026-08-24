@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { normalize, type NormalizedBillingEvent } from "@/lib/billing/normalize";
+import { renderAuthEmail } from "@/lib/email/templates";
+import { sendEmail } from "@/lib/email/send";
+import { slugify } from "@/lib/tenant";
 
 type Provider = "kiwify" | "cakto" | "perfectpay";
 
@@ -46,6 +49,94 @@ async function findPlanByRef(supabase: any, ref: string | null): Promise<string 
   return byCheckout?.id ?? null;
 }
 
+function defaultCompanyName(email: string): string {
+  const local = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  return local ? `Empresa de ${local}` : "Minha empresa";
+}
+
+// Não existe mais tela de auto-cadastro pré-pagamento: a conta só nasce aqui,
+// disparada pela primeira compra aprovada. Cria o usuário (via convite do
+// Supabase, que já devolve um link pra definir senha), a empresa já ativa e
+// manda o e-mail de boas-vindas com a cara do sistema (mesmo template usado
+// pelo hook de auth em src/routes/api/public/auth-email-hook.ts).
+async function provisionCompanyFromPurchase(
+  supabase: any,
+  evt: NormalizedBillingEvent,
+): Promise<{ companyId: string } | { error: string }> {
+  const email = evt.buyerEmail!;
+  const siteUrl = process.env.SITE_URL || "https://atendemaisempresas.com.br";
+
+  const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: { redirectTo: `${siteUrl}/reset-senha` },
+  });
+  if (linkErr || !linkData?.user) {
+    return { error: `falha ao criar usuário: ${linkErr?.message || "sem usuário retornado"}` };
+  }
+  const userId = linkData.user.id as string;
+
+  const planId = await findPlanByRef(supabase, evt.productRef);
+  let planSlug: string | null = null;
+  if (planId) {
+    const { data: planRow } = await supabase.from("plan").select("slug").eq("id", planId).maybeSingle();
+    planSlug = planRow?.slug ?? null;
+  }
+
+  const nome = evt.buyerName?.trim() || defaultCompanyName(email);
+  const slug = `${slugify(nome)}-${Math.random().toString(36).slice(2, 6)}`;
+  const creditosResetamEm = new Date(Date.now() + 30 * 86400000).toISOString();
+
+  const { data: company, error: companyErr } = await supabase
+    .from("company")
+    .insert({
+      nome,
+      slug,
+      primary_color: "#25D366",
+      created_by: userId,
+      status_cobranca: "ativo",
+      onboarding_completed: false,
+      onboarding_step: 0,
+      trial_ate: creditosResetamEm,
+      selected_plan_slug: planSlug,
+    })
+    .select("id")
+    .single();
+  if (companyErr || !company) {
+    return { error: `falha ao criar empresa: ${companyErr?.message || "erro desconhecido"}` };
+  }
+
+  const { error: memberErr } = await supabase.from("company_user").insert({
+    user_id: userId,
+    company_id: company.id,
+    role: "owner",
+    ativo: true,
+  });
+  if (memberErr) {
+    return { error: `empresa criada mas falhou ao vincular usuário: ${memberErr.message}` };
+  }
+
+  if (planId) {
+    await supabase.from("subscription").insert({
+      company_id: company.id,
+      plan_id: planId,
+      status: "active",
+    });
+  }
+
+  try {
+    const actionLink = linkData.properties?.action_link;
+    if (actionLink) {
+      const { subject, html } = renderAuthEmail("invite", actionLink);
+      await sendEmail(email, subject, html);
+    }
+  } catch (e: any) {
+    console.error("[billing.webhook] empresa criada, mas falha ao enviar e-mail de boas-vindas:", e?.message || e);
+  }
+
+  return { companyId: company.id as string };
+}
+
 async function applyEvent(evt: NormalizedBillingEvent) {
   const supabase = await getAdmin();
 
@@ -62,12 +153,25 @@ async function applyEvent(evt: NormalizedBillingEvent) {
     return;
   }
 
-  const companyId = await findCompanyByEmail(supabase, evt.buyerEmail);
+  let companyId = await findCompanyByEmail(supabase, evt.buyerEmail);
   if (!companyId) {
-    await supabase
-      .from("billing_event_log")
-      .insert({ ...logRow, error: "empresa não encontrada para o email" });
-    return;
+    // Sem tela de auto-cadastro pré-pagamento: a primeira compra aprovada é
+    // quem cria a conta (ver provisionCompanyFromPurchase). Qualquer outro
+    // tipo de evento (renovação, cancelamento etc.) pra um email desconhecido
+    // continua só sendo logado — não tem o que provisionar sem uma compra.
+    if (evt.eventType !== "purchase_approved") {
+      await supabase
+        .from("billing_event_log")
+        .insert({ ...logRow, error: "empresa não encontrada para o email" });
+      return;
+    }
+    const result = await provisionCompanyFromPurchase(supabase, evt);
+    if ("error" in result) {
+      console.error("[billing.webhook] falha ao provisionar conta:", result.error);
+      await supabase.from("billing_event_log").insert({ ...logRow, error: result.error });
+      return;
+    }
+    companyId = result.companyId;
   }
 
   const planId = await findPlanByRef(supabase, evt.productRef);

@@ -16,7 +16,7 @@ export const Route = createFileRoute("/master")({
     const isSuper = (roles ?? []).some((r: any) => r.role === "super_admin");
     if (!isSuper) {
       await supabase.auth.signOut();
-      throw redirect({ to: "/entrar", search: { modo: "login" } });
+      throw redirect({ to: "/entrar" });
     }
     return { user: u.user };
   },

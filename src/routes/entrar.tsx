@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useNavigate, Link, useSearch } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  Sparkles,
   Loader2,
   Bot,
   KanbanSquare,
@@ -18,17 +17,12 @@ import {
 } from "lucide-react";
 import { brand } from "@/config/brand";
 
-type Search = { modo?: "login" | "signup"; plano?: string };
-
-type PlanInfo = { nome: string; preco: string };
-
-const ATIVACAO_TEXTO = "R$ 499,00";
+type Search = { plano?: string };
 
 export const Route = createFileRoute("/entrar")({
   ssr: false,
-  head: () => ({ meta: [{ title: `${brand.name} — Começar` }] }),
+  head: () => ({ meta: [{ title: `${brand.name} — Entrar` }] }),
   validateSearch: (s: Record<string, unknown>): Search => ({
-    modo: s.modo === "login" ? "login" : "signup",
     plano: typeof s.plano === "string" ? s.plano : undefined,
   }),
   beforeLoad: async ({ search }) => {
@@ -43,39 +37,12 @@ export const Route = createFileRoute("/entrar")({
 
 const emailSchema = z.string().email("E-mail inválido");
 
-function genStrongPassword() {
-  const arr = new Uint8Array(24);
-  crypto.getRandomValues(arr);
-  return "Az9!" + btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, "x").slice(0, 28);
-}
-
 function EntrarPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/entrar" }) as Search;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [needsPassword, setNeedsPassword] = useState(search.modo === "login");
   const [loading, setLoading] = useState(false);
-
-  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
-
-  useEffect(() => {
-    if (!search.plano) { setPlanInfo(null); return; }
-    let cancelled = false;
-    supabase
-      .from("plan")
-      .select("slug, nome, preco_cents")
-      .eq("slug", search.plano)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled || !data) return;
-        setPlanInfo({
-          nome: data.nome,
-          preco: (data.preco_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) + "/mês",
-        });
-      });
-    return () => { cancelled = true; };
-  }, [search.plano]);
 
   async function routeAfterAuth() {
     const { data: u } = await supabase.auth.getUser();
@@ -101,63 +68,11 @@ function EntrarPage() {
     if (!v.success) return toast.error(v.error.issues[0].message);
     setLoading(true);
 
-    if (needsPassword) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      setLoading(false);
-      if (error) return toast.error("Senha incorreta. Tente novamente ou recupere sua senha.");
-      toast.success("Bem-vindo de volta!");
-      return routeAfterAuth();
-    }
-
-    const generated = genStrongPassword();
-    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-      email,
-      password: generated,
-      options: { emailRedirectTo: window.location.origin + (search.plano ? `/app/checkout?plano=${search.plano}` : "/app/dashboard") },
-    });
-
-    if (signUpErr) {
-      const msg = (signUpErr.message || "").toLowerCase();
-      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
-        setNeedsPassword(true);
-        setLoading(false);
-        toast.message("Já existe uma conta com esse e-mail.", { description: "Digite sua senha para continuar." });
-        return;
-      }
-      if (msg.includes("signups not allowed") || msg.includes("signup_disabled") || msg.includes("signup is disabled")) {
-        setNeedsPassword(true);
-        setLoading(false);
-        toast.message("Cadastros novos estão desativados.", { description: "Se você já tem conta, digite sua senha para entrar." });
-        return;
-      }
-      setLoading(false);
-      return toast.error(signUpErr.message);
-    }
-
-    if (signUpData.session) {
-      setLoading(false);
-      toast.success("Conta criada! Vamos para o pagamento.");
-      return routeAfterAuth();
-    }
-
-    // Supabase não retorna erro para e-mail já cadastrado e confirmado (evita
-    // vazar quais e-mails existem) — em vez disso devolve `identities: []`.
-    // É o único jeito confiável de detectar "essa conta já existe".
-    if (signUpData.user && signUpData.user.identities?.length === 0) {
-      setNeedsPassword(true);
-      setLoading(false);
-      toast.message("Já existe uma conta com esse e-mail.", { description: "Digite sua senha para continuar." });
-      return;
-    }
-
-    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: generated });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (signInErr) {
-      toast.success("Enviamos um link de confirmação para o seu e-mail.");
-      return;
-    }
-    toast.success("Conta criada!");
-    routeAfterAuth();
+    if (error) return toast.error("E-mail ou senha incorretos. Tente novamente ou recupere sua senha.");
+    toast.success("Bem-vindo de volta!");
+    return routeAfterAuth();
   }
 
   return (
@@ -248,31 +163,16 @@ function EntrarPage() {
               />
 
               <div className="relative">
-                {planInfo && (
-                  <div className="mb-5 rounded-xl border border-[color:var(--brand)]/30 bg-[color:var(--brand-soft)] p-4">
-                    <div className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-[0.14em] text-[color:var(--brand-text)]">
-                      <Sparkles className="size-3.5" /> Plano escolhido
-                    </div>
-                    <div className="mt-1 flex items-baseline justify-between">
-                      <div className="font-display text-lg font-bold">{planInfo.nome}</div>
-                      <div className="text-sm font-semibold">{planInfo.preco}</div>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">Implementação: {ATIVACAO_TEXTO} • pagamento único</div>
-                  </div>
-                )}
-
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--brand-soft)] border border-[color:var(--brand)]/20 text-[11px] font-semibold text-[color:var(--brand-text)] mb-3">
                   <span className="size-1.5 rounded-full bg-[color:var(--brand)] dot-pulse" />
-                  {needsPassword ? "Acesso à conta" : "Cadastro em 1 clique"}
+                  Acesso à conta
                 </div>
 
                 <h1 className="font-display text-[26px] sm:text-[28px] font-extrabold leading-tight tracking-tight">
-                  {needsPassword ? "Bem-vindo de volta" : "Comece em 1 clique"}
+                  Bem-vindo de volta
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1.5 mb-6">
-                  {needsPassword
-                    ? "Você já tem conta — informe sua senha pra continuar."
-                    : "Só precisamos do seu e-mail. Criamos a conta na hora e te levamos pro próximo passo."}
+                  Entre com o e-mail e senha da sua conta {brand.name}.
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -282,7 +182,7 @@ function EntrarPage() {
                       id="email"
                       type="email"
                       value={email}
-                      onChange={(e) => { setEmail(e.target.value); if (needsPassword && search.modo !== "login") setNeedsPassword(false); }}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
                       autoFocus
                       placeholder="voce@empresa.com"
@@ -290,17 +190,15 @@ function EntrarPage() {
                     />
                   </div>
 
-                  {needsPassword && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="pwd">Senha</Label>
-                        <Link to="/esqueci-senha" className="text-[11.5px] font-medium text-muted-foreground hover:text-[color:var(--brand-text)] transition-colors">
-                          Esqueci minha senha
-                        </Link>
-                      </div>
-                      <Input id="pwd" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus required className="h-11" />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="pwd">Senha</Label>
+                      <Link to="/esqueci-senha" className="text-[11.5px] font-medium text-muted-foreground hover:text-[color:var(--brand-text)] transition-colors">
+                        Esqueci minha senha
+                      </Link>
                     </div>
-                  )}
+                    <Input id="pwd" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11" />
+                  </div>
 
                   <Button
                     type="submit"
@@ -309,14 +207,12 @@ function EntrarPage() {
                     className="w-full h-12 bg-gradient-brand text-primary-foreground hover:opacity-95 font-semibold text-[14.5px] shadow-[0_8px_24px_-10px_rgba(22,163,74,.6)]"
                   >
                     {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
-                    {needsPassword ? "Entrar e continuar" : planInfo ? "Continuar para o pagamento" : "Criar minha conta"}
+                    Entrar
                   </Button>
 
-                  {!needsPassword && (
-                    <p className="text-[11.5px] text-muted-foreground text-center pt-1 leading-relaxed">
-                      Implementação única de <span className="font-semibold text-foreground">{ATIVACAO_TEXTO}</span>{planInfo ? <> — depois, {planInfo.preco}</> : null}.
-                    </p>
-                  )}
+                  <p className="text-[11.5px] text-muted-foreground text-center pt-1 leading-relaxed">
+                    Ainda não é cliente? <a href="/#planos" className="underline underline-offset-2 hover:text-foreground">Veja os planos</a> — sua conta é criada automaticamente assim que o pagamento é confirmado.
+                  </p>
                 </form>
               </div>
             </div>

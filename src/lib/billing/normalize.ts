@@ -14,6 +14,7 @@ export type NormalizedBillingEvent = {
   eventType: BillingEventType;
   rawEventName: string;
   buyerEmail: string | null;
+  buyerName: string | null;
   externalSubscriptionId: string | null;
   externalCustomerId: string | null;
   productRef: string | null;
@@ -54,6 +55,7 @@ export function normalizeKiwify(body: any): NormalizedBillingEvent {
     eventType: mapKiwifyEvent(eventName),
     rawEventName: eventName,
     buyerEmail: lower(pick(body, "Customer.email", "customer.email", "buyer.email")),
+    buyerName: pick<string>(body, "Customer.full_name", "customer.full_name", "Customer.first_name") ?? null,
     externalSubscriptionId:
       pick<string>(body, "Subscription.id", "subscription_id", "subscription.id", "order_id", "id") ?? null,
     externalCustomerId: pick<string>(body, "Customer.id", "customer.id", "Customer.CPF") ?? null,
@@ -90,6 +92,7 @@ export function normalizeCakto(body: any): NormalizedBillingEvent {
     eventType: mapCaktoEvent(eventName),
     rawEventName: eventName,
     buyerEmail: lower(pick(data, "customer.email", "buyer.email", "customer_email")),
+    buyerName: pick<string>(data, "customer.name", "customer.full_name", "buyer.name") ?? null,
     externalSubscriptionId:
       pick<string>(data, "subscription.id", "subscription_id", "transaction_id", "id") ?? null,
     externalCustomerId: pick<string>(data, "customer.id", "customer_id") ?? null,
@@ -123,6 +126,7 @@ export function normalizePerfectpay(body: any): NormalizedBillingEvent {
     eventType: mapPerfectpayEvent(status),
     rawEventName: status,
     buyerEmail: lower(pick(body, "customer.email", "client.email", "email")),
+    buyerName: pick<string>(body, "customer.full_name", "customer.name", "client.name") ?? null,
     externalSubscriptionId:
       pick<string>(body, "subscription.code", "code", "sale_id", "transaction_code") ?? null,
     externalCustomerId: pick<string>(body, "customer.id", "customer_id") ?? null,
