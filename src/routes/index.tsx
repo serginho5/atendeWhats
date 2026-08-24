@@ -285,35 +285,35 @@ function Header({
 }) {
   return (
     <header className="lp-header sticky top-0 z-50 backdrop-blur-xl">
-      <div className="mx-auto max-w-7xl px-4 sm:px-5 md:px-8 h-[4.5rem] md:h-20 flex items-center justify-between gap-3">
-        <a href="/" className="flex items-center gap-2.5">
-          <img src="/logo-mascot.svg" alt="" className="h-10 w-10 md:h-11 md:w-11 rounded-2xl btn-glow" />
-          <span className="font-brand text-[1.5rem] md:text-[1.7rem] leading-none">
+      <div className="mx-auto max-w-7xl px-2.5 sm:px-5 md:px-8 h-[4.5rem] md:h-20 flex items-center justify-between gap-1.5 sm:gap-3">
+        <a href="/" className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+          <img src="/logo-mascot.svg" alt="" className="h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 rounded-2xl btn-glow shrink-0" />
+          <span className="font-brand text-[0.92rem] sm:text-[1.5rem] md:text-[1.7rem] leading-none truncate">
             Atende<span className="text-grad">+Empresas</span>
           </span>
         </a>
-        <nav className="hidden md:flex items-center gap-8 text-[15px] font-semibold text-white/70">
+        <nav className="hidden md:flex items-center gap-8 text-[15px] font-semibold text-white/70 shrink-0">
           <a href="#como" className="hover:text-white transition">Como funciona</a>
           <a href="#recursos" className="hover:text-white transition">Recursos</a>
           <a href="#planos" className="hover:text-white transition">Planos</a>
           <a href="#faq" className="hover:text-white transition">Dúvidas</a>
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={onToggleTheme}
             aria-label="Alternar tema"
             title={isDark ? "Tema claro" : "Tema escuro"}
-            className="size-10 grid place-items-center rounded-xl glass text-white/80 hover:text-white transition"
+            className="size-8 sm:size-10 grid place-items-center rounded-xl glass text-white/80 hover:text-white transition shrink-0"
           >
             {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
-          <button onClick={() => onCta("/entrar")} className="hidden sm:inline text-[15px] font-semibold px-4 py-2.5 rounded-xl text-white/80 hover:text-white">
+          <button onClick={() => onCta("/entrar")} className="hidden sm:inline text-[15px] font-semibold px-4 py-2.5 rounded-xl text-white/80 hover:text-white shrink-0">
             Entrar
           </button>
           <button
             onClick={() => onCta("#planos")}
-            className="text-[15px] font-bold px-5 py-3 rounded-xl text-black btn-glow"
+            className="text-[11.5px] sm:text-[15px] font-bold px-2.5 py-2 sm:px-5 sm:py-3 rounded-xl text-black btn-glow whitespace-nowrap shrink-0"
             style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
           >
             Ver planos

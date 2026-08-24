@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/config/brand";
-import { Hand, MessageSquareText, Send, Sparkles, User, Search, Bot, ExternalLink, Star } from "lucide-react";
+import { Hand, MessageSquareText, Send, Sparkles, User, Search, Bot, ExternalLink, Star, ArrowLeft } from "lucide-react";
 import { sendCsat } from "@/lib/csat.functions";
 import { toast } from "sonner";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -254,9 +254,9 @@ function ConversasPage() {
         }} />
       </header>
 
-      <div className="grid md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] border border-[color:var(--hairline)] rounded-2xl overflow-hidden h-[calc(100vh-200px)] min-h-[500px] bg-[color:var(--panel)]">
+      <div className="grid md:grid-cols-[320px_1fr] xl:grid-cols-[320px_1fr_300px] border border-[color:var(--hairline)] rounded-2xl overflow-hidden h-[calc(100dvh-260px)] md:h-[calc(100vh-200px)] min-h-[420px] md:min-h-[500px] bg-[color:var(--panel)]">
         {/* LISTA */}
-        <aside className="border-r border-[color:var(--hairline)] flex flex-col min-h-0 bg-[color:var(--panel)]">
+        <aside className={`${active ? "hidden md:flex" : "flex"} border-r border-[color:var(--hairline)] flex-col min-h-0 bg-[color:var(--panel)]`}>
           <div className="p-3 border-b border-[color:var(--hairline)]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -308,7 +308,7 @@ function ConversasPage() {
         </aside>
 
         {/* THREAD */}
-        <section className="flex flex-col min-h-0 bg-[color:var(--panel-2)]">
+        <section className={`${active ? "flex" : "hidden md:flex"} flex-col min-h-0 bg-[color:var(--panel-2)]`}>
           {!active ? (
             <div className="flex-1 grid place-items-center text-muted-foreground text-sm">
               <div className="text-center"><MessageSquareText className="mx-auto mb-2 size-6" />Selecione uma conversa</div>
@@ -316,6 +316,14 @@ function ConversasPage() {
           ) : (
             <>
               <header className="flex items-center gap-3 px-4 py-3 border-b border-[color:var(--hairline)] bg-[color:var(--panel)]">
+                <button
+                  type="button"
+                  onClick={() => setActive(null)}
+                  aria-label="Voltar para a lista"
+                  className="md:hidden -ml-1 size-8 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)] shrink-0"
+                >
+                  <ArrowLeft className="size-[18px]" />
+                </button>
                 <InitialsAvatar name={activeConv?.nome || active} size={38} />
                 <div className="min-w-0">
                   <div className="font-semibold text-sm truncate">{activeConv?.nome || active}</div>

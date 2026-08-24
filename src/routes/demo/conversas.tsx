@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/config/brand";
-import { Hand, MessageSquareText, Send, Sparkles, User, Star, Bell } from "lucide-react";
+import { Hand, MessageSquareText, Send, Sparkles, User, Star, Bell, ArrowLeft } from "lucide-react";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { AuthorBadge } from "@/components/dashboard/message-timeline";
 import { demoMensagens, demoCards, type DemoMsg } from "@/lib/demo-data";
@@ -78,9 +78,9 @@ function ConversasDemo() {
         </div>
       </header>
 
-      <div className="grid md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_260px] gap-0 border border-border rounded-2xl overflow-hidden h-[calc(100vh-180px)] min-h-[480px] bg-card">
+      <div className="grid md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_260px] gap-0 border border-border rounded-2xl overflow-hidden h-[calc(100dvh-260px)] md:h-[calc(100vh-180px)] min-h-[420px] md:min-h-[480px] bg-card">
         {/* LISTA */}
-        <aside className="border-r border-border flex flex-col min-h-0 bg-card">
+        <aside className={`${active ? "hidden md:flex" : "flex"} border-r border-border flex-col min-h-0 bg-card`}>
           <div className="p-3 border-b border-border space-y-2">
             <Input placeholder="Buscar contato…" value={search} onChange={(e) => setSearch(e.target.value)} />
             <div className="flex gap-1 overflow-x-auto -mx-0.5 px-0.5 scrollbar-none">
@@ -127,7 +127,7 @@ function ConversasDemo() {
         </aside>
 
         {/* THREAD */}
-        <section className="flex flex-col min-h-0 bg-muted/30">
+        <section className={`${active ? "flex" : "hidden md:flex"} flex-col min-h-0 bg-muted/30`}>
           {!active ? (
             <div className="flex-1 grid place-items-center text-muted-foreground text-sm">
               <div className="text-center"><MessageSquareText className="mx-auto mb-2 size-6" />Selecione uma conversa</div>
@@ -135,6 +135,14 @@ function ConversasDemo() {
           ) : (
             <>
               <header className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                <button
+                  type="button"
+                  onClick={() => setActive(null)}
+                  aria-label="Voltar para a lista"
+                  className="md:hidden -ml-1 size-8 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                >
+                  <ArrowLeft className="size-[18px]" />
+                </button>
                 <InitialsAvatar name={activeConv?.nome || active} size={36} />
                 <div className="min-w-0">
                   <div className="font-semibold text-sm truncate">{activeConv?.nome || active}</div>
