@@ -128,3 +128,45 @@ export function renderWelcomeEmail(opts: { nome: string | null; email: string; p
     `),
   };
 }
+
+// Segundo e-mail pós-compra, pedindo pra marcar o onboarding com um
+// especialista — mandado logo depois de renderWelcomeEmail em
+// provisionCompanyFromPurchase (src/routes/api/public/billing/webhook.ts).
+export function renderScheduleReminderEmail(opts: { nome: string | null; loginUrl: string }): { subject: string; html: string } {
+  const primeiroNome = opts.nome?.trim().split(/\s+/)[0] || null;
+  const saudacao = primeiroNome ? `Oi, ${primeiroNome}!` : "Oi!";
+  return {
+    subject: `Vamos marcar seu onboarding? — ${BRAND_NAME}`,
+    html: shell("Marque seu onboarding", `
+      <h1 style="margin:0 0 12px;font-size:22px;color:#111827;">${saudacao} Falta um passo importante 📅</h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">Pra sua IA já sair no ar treinada certinho com o seu negócio, um especialista do nosso time faz o setup junto com você numa call rápida.</p>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">Entre na sua conta e escolha um horário que funcione pra você — leva menos de 1 minuto.</p>
+      <p style="text-align:center;margin:0 0 20px;">${button("Marcar meu onboarding", opts.loginUrl)}</p>
+      <p style="margin:0;font-size:12.5px;line-height:1.6;color:#6b7280;">Qualquer dúvida, é só responder este e-mail ou chamar no WhatsApp do suporte.</p>
+    `),
+  };
+}
+
+// E-mail de alerta interno pro dono da plataforma — sem a casca de marca,
+// só um aviso direto quando um cliente novo compra ou agenda o onboarding.
+export function renderInternalAlertEmail(opts: {
+  tipo: "compra" | "agendamento";
+  empresa: string;
+  contatoNome: string | null;
+  contatoEmail: string;
+  detalhe?: string;
+}): { subject: string; html: string } {
+  const titulo = opts.tipo === "compra" ? "🛒 Nova compra" : "📅 Novo agendamento de onboarding";
+  return {
+    subject: `${titulo} — ${opts.empresa}`,
+    html: `<!doctype html><html lang="pt-BR"><body style="font-family:Arial,Helvetica,sans-serif;background:#f4f6f5;padding:24px;">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
+        <h2 style="margin:0 0 14px;font-size:18px;color:#111827;">${titulo}</h2>
+        <p style="margin:0 0 6px;font-size:14px;color:#374151;"><b>Empresa:</b> ${opts.empresa}</p>
+        <p style="margin:0 0 6px;font-size:14px;color:#374151;"><b>Contato:</b> ${opts.contatoNome || "—"}</p>
+        <p style="margin:0 0 6px;font-size:14px;color:#374151;"><b>E-mail:</b> ${opts.contatoEmail}</p>
+        ${opts.detalhe ? `<p style="margin:10px 0 0;font-size:14px;color:#374151;">${opts.detalhe}</p>` : ""}
+      </div>
+    </body></html>`,
+  };
+}

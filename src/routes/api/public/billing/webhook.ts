@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { normalize, type NormalizedBillingEvent } from "@/lib/billing/normalize";
-import { renderWelcomeEmail } from "@/lib/email/templates";
+import { renderWelcomeEmail, renderScheduleReminderEmail, renderInternalAlertEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/send";
 import { slugify } from "@/lib/tenant";
 
@@ -139,6 +139,29 @@ async function provisionCompanyFromPurchase(
     await sendEmail(email, subject, html);
   } catch (e: any) {
     console.error("[billing.webhook] empresa criada, mas falha ao enviar e-mail de boas-vindas:", e?.message || e);
+  }
+
+  try {
+    const { subject, html } = renderScheduleReminderEmail({ nome: evt.buyerName, loginUrl: `${siteUrl}/entrar` });
+    await sendEmail(email, subject, html);
+  } catch (e: any) {
+    console.error("[billing.webhook] falha ao enviar lembrete de agendamento:", e?.message || e);
+  }
+
+  try {
+    const { data: cfg } = await supabase.from("app_config").select("super_admin_emails").eq("id", true).maybeSingle();
+    const { subject, html } = renderInternalAlertEmail({
+      tipo: "compra",
+      empresa: nome,
+      contatoNome: evt.buyerName,
+      contatoEmail: email,
+      detalhe: planSlug ? `Plano: ${planSlug}.` : undefined,
+    });
+    for (const to of (cfg?.super_admin_emails ?? []) as string[]) {
+      await sendEmail(to, subject, html).catch(() => {});
+    }
+  } catch (e: any) {
+    console.error("[billing.webhook] falha ao enviar alerta interno de compra:", e?.message || e);
   }
 
   return { companyId: company.id as string };

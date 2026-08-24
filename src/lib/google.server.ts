@@ -33,6 +33,118 @@ export function verifyState(state: string): { companyId: string } | null {
   }
 }
 
+// Mesmo HMAC de verifyState, mas pro fluxo de conexão do Google "master"
+// (dono da plataforma) — não carrega companyId, só confirma que o state
+// não foi adulterado.
+export function verifyMasterState(state: string): boolean {
+  const parts = state.split(".");
+  if (parts.length !== 2) return false;
+  const [payload, sig] = parts;
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback";
+  const expected = createHmac("sha256", secret).update(payload).digest("hex").slice(0, 16);
+  return sig === expected;
+}
+
+// Lê/refresca o access_token do Google conectado em app_config (conta
+// pessoal do dono da plataforma — não confundir com google_integration,
+// que é por empresa/cliente).
+export async function getMasterGoogleAccessToken(admin: any): Promise<string | null> {
+  const { data: cfg } = await admin.from("app_config").select("*").eq("id", true).maybeSingle();
+  if (!cfg?.google_conectado || !cfg.google_access_token) return null;
+
+  if (cfg.google_expiry && new Date(cfg.google_expiry).getTime() < Date.now() + 60_000 && cfg.google_refresh_token) {
+    const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        refresh_token: cfg.google_refresh_token as string,
+        grant_type: "refresh_token",
+      }),
+    });
+    const tok = await tokRes.json();
+    if (tok.access_token) {
+      await admin.from("app_config").update({
+        google_access_token: tok.access_token,
+        google_expiry: new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString(),
+      }).eq("id", true);
+      return tok.access_token as string;
+    }
+    return null;
+  }
+  return cfg.google_access_token as string;
+}
+
+// Cria evento na Google Agenda do dono da plataforma (app_config), com
+// checagem de freeBusy e link de Meet — usado pelo agendamento de onboarding
+// com especialista (src/lib/specialist-booking.functions.ts).
+export async function createMasterCalendarEvent(
+  admin: any,
+  data: { titulo: string; inicio: string; fim: string; descricao?: string },
+): Promise<{ eventId: string; meetLink: string | null }> {
+  const accessToken = await getMasterGoogleAccessToken(admin);
+  if (!accessToken) throw new Error("Google não conectado");
+
+  const { data: cfg } = await admin.from("app_config").select("google_calendar_id").eq("id", true).maybeSingle();
+  const calendarId = cfg?.google_calendar_id || "primary";
+
+  const fbRes = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ timeMin: data.inicio, timeMax: data.fim, items: [{ id: calendarId }] }),
+  });
+  if (fbRes.ok) {
+    const fb = await fbRes.json();
+    const busy = fb?.calendars?.[calendarId]?.busy;
+    if (Array.isArray(busy) && busy.length > 0) throw new Error("SLOT_OCUPADO");
+  }
+
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+  url.searchParams.set("conferenceDataVersion", "1");
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary: data.titulo,
+      description: data.descricao || "",
+      start: { dateTime: data.inicio, timeZone: "America/Sao_Paulo" },
+      end: { dateTime: data.fim, timeZone: "America/Sao_Paulo" },
+      reminders: { useDefault: true },
+      conferenceData: {
+        createRequest: {
+          requestId: `az-onb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`Google API: ${res.status} ${await res.text()}`);
+  const ev = await res.json();
+  const meetLink: string | null =
+    ev?.hangoutLink ||
+    ev?.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === "video")?.uri ||
+    null;
+  return { eventId: ev.id as string, meetLink };
+}
+
+// Adiciona uma linha na planilha de agendamentos do dono da plataforma.
+export async function appendToMasterSpreadsheet(admin: any, row: string[]): Promise<void> {
+  const accessToken = await getMasterGoogleAccessToken(admin);
+  if (!accessToken) return;
+  const { data: cfg } = await admin.from("app_config").select("google_spreadsheet_id").eq("id", true).maybeSingle();
+  const spreadsheetId = cfg?.google_spreadsheet_id;
+  if (!spreadsheetId) return;
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Agendamentos!A:F:append?valueInputOption=USER_ENTERED`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: [row] }),
+    },
+  );
+}
+
 // Cria evento no Google Agenda usando os tokens armazenados da empresa.
 // Refresca o access_token se expirou. Insere também na tabela agendamento.
 export async function createCalendarEventForCompany(

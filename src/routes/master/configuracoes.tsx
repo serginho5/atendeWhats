@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, X, Save, Copy, CheckCircle2, AlertCircle, BookOpen, Zap } from "lucide-react";
+import { Loader2, Plus, X, Save, Copy, CheckCircle2, AlertCircle, BookOpen, Zap, Calendar, Link2, Unlink } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { brand } from "@/config/brand";
 import { getSuperAdminEmails, setSuperAdminEmails } from "@/lib/master.functions";
 import { getBillingWebhookInfo, listRecentBillingEvents } from "@/lib/billing.functions";
+import { startMasterGoogleOAuth, disconnectMasterGoogle, getMasterGoogleStatus } from "@/lib/master-google.functions";
 
 export const Route = createFileRoute("/master/configuracoes")({
   head: () => ({ meta: [{ title: `${brand.name} — Master Config` }] }),
@@ -22,6 +23,9 @@ function ConfigPage() {
   const set = useServerFn(setSuperAdminEmails);
   const getWebhooks = useServerFn(getBillingWebhookInfo);
   const getEvents = useServerFn(listRecentBillingEvents);
+  const startGoogle = useServerFn(startMasterGoogleOAuth);
+  const disconnectGoogle = useServerFn(disconnectMasterGoogle);
+  const getGoogleStatus = useServerFn(getMasterGoogleStatus);
 
   const [emails, setEmails] = useState<string[]>([]);
   const [novo, setNovo] = useState("");
@@ -29,19 +33,50 @@ function ConfigPage() {
   const [saving, setSaving] = useState(false);
   const [tokens, setTokens] = useState<{ kiwify: string; cakto: string; perfectpay: string } | null>(null);
   const [events, setEvents] = useState<any[]>([]);
+  const [googleStatus, setGoogleStatus] = useState<{ conectado: boolean; email: string | null; spreadsheetId: string | null } | null>(null);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const [r, w, e] = await Promise.allSettled([get(), getWebhooks(), getEvents()]);
+      const [r, w, e, g] = await Promise.allSettled([get(), getWebhooks(), getEvents(), getGoogleStatus()]);
       if (r.status === "fulfilled") setEmails(r.value.emails);
       else toast.error(`Emails: ${r.reason?.message ?? r.reason}`);
       if (w.status === "fulfilled") setTokens(w.value);
       else toast.error(`Webhooks: ${w.reason?.message ?? w.reason}`);
       if (e.status === "fulfilled") setEvents(e.value);
       else toast.error(`Eventos: ${e.reason?.message ?? e.reason}`);
+      if (g.status === "fulfilled") setGoogleStatus(g.value);
       setLoading(false);
     })();
   }, []);
+
+  async function connectGoogle() {
+    setConnectingGoogle(true);
+    try {
+      const r = await startGoogle();
+      if (!r.ok) return toast.error(r.error);
+      window.open(r.url, "_blank", "noopener,noreferrer");
+      toast.message("Conecte na aba que abriu e volte aqui pra atualizar o status.");
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao iniciar conexão");
+    } finally {
+      setConnectingGoogle(false);
+    }
+  }
+
+  async function refreshGoogleStatus() {
+    try { setGoogleStatus(await getGoogleStatus()); } catch {}
+  }
+
+  async function doDisconnectGoogle() {
+    try {
+      await disconnectGoogle();
+      toast.success("Google desconectado");
+      void refreshGoogleStatus();
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao desconectar");
+    }
+  }
 
   function add(e: React.FormEvent) {
     e.preventDefault();
@@ -210,6 +245,44 @@ function ConfigPage() {
             </ul>
           )}
         </div>
+      </Card>
+
+      <Card className="p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold flex items-center gap-2"><Calendar className="size-4" /> Agenda do especialista (Google)</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Conecta sua conta Google pessoal pra alimentar o agendamento de onboarding que os clientes veem no
+            wizard de boas-vindas. Cria eventos com Meet na sua Agenda e registra cada agendamento numa planilha
+            do seu Drive.
+          </p>
+        </div>
+        {loading ? (
+          <div className="grid place-items-center py-4"><Loader2 className="animate-spin text-muted-foreground" /></div>
+        ) : googleStatus?.conectado ? (
+          <div className="flex items-center justify-between border rounded-md p-3">
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="size-4 text-emerald-600" />
+              <span>Conectado{googleStatus.email ? ` — ${googleStatus.email}` : ""}</span>
+              {!googleStatus.spreadsheetId && (
+                <Badge variant="destructive" className="text-[10px] ml-1">planilha não criada</Badge>
+              )}
+            </div>
+            <Button size="sm" variant="outline" onClick={doDisconnectGoogle}>
+              <Unlink className="size-3.5 mr-1.5" /> Desconectar
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between border rounded-md p-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="size-4" /> Não conectado
+            </div>
+            <Button size="sm" onClick={connectGoogle} disabled={connectingGoogle}>
+              {connectingGoogle ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : <Link2 className="size-3.5 mr-1.5" />}
+              Conectar Google
+            </Button>
+          </div>
+        )}
+        <Button size="sm" variant="ghost" onClick={refreshGoogleStatus} className="text-xs">Atualizar status</Button>
       </Card>
 
       <Card className="p-5 space-y-4">

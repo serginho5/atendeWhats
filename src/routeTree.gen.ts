@@ -58,6 +58,7 @@ import { Route as MasterPainelRouteImport } from './routes/master/painel'
 import { Route as MasterPlanosRouteImport } from './routes/master/planos'
 import { Route as ApiPublicAuthEmailHookRouteImport } from './routes/api/public/auth-email-hook'
 import { Route as ApiPublicGoogleCallbackRouteImport } from './routes/api/public/google-callback'
+import { Route as ApiPublicGoogleCallbackMasterRouteImport } from './routes/api/public/google-callback-master'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
 import { Route as ApiPublicBillingWebhookRouteImport } from './routes/api/public/billing/webhook'
 import { Route as ApiPublicHooksProcessCampaignsRouteImport } from './routes/api/public/hooks/process-campaigns'
@@ -308,6 +309,12 @@ const ApiPublicGoogleCallbackRoute = ApiPublicGoogleCallbackRouteImport.update({
   path: '/api/public/google-callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicGoogleCallbackMasterRoute =
+  ApiPublicGoogleCallbackMasterRouteImport.update({
+    id: '/api/public/google-callback-master',
+    path: '/api/public/google-callback-master',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicWhatsappWebhookRoute =
   ApiPublicWhatsappWebhookRouteImport.update({
     id: '/api/public/whatsapp-webhook',
@@ -381,6 +388,7 @@ export interface FileRoutesByFullPath {
   '/master/': typeof MasterIndexRoute
   '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
+  '/api/public/google-callback-master': typeof ApiPublicGoogleCallbackMasterRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
@@ -434,6 +442,7 @@ export interface FileRoutesByTo {
   '/master': typeof MasterIndexRoute
   '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
+  '/api/public/google-callback-master': typeof ApiPublicGoogleCallbackMasterRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
@@ -490,6 +499,7 @@ export interface FileRoutesById {
   '/master/': typeof MasterIndexRoute
   '/api/public/auth-email-hook': typeof ApiPublicAuthEmailHookRoute
   '/api/public/google-callback': typeof ApiPublicGoogleCallbackRoute
+  '/api/public/google-callback-master': typeof ApiPublicGoogleCallbackMasterRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/billing/webhook': typeof ApiPublicBillingWebhookRoute
   '/api/public/hooks/process-campaigns': typeof ApiPublicHooksProcessCampaignsRoute
@@ -547,6 +557,7 @@ export interface FileRouteTypes {
     | '/master/'
     | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
+    | '/api/public/google-callback-master'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
@@ -600,6 +611,7 @@ export interface FileRouteTypes {
     | '/master'
     | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
+    | '/api/public/google-callback-master'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
@@ -655,6 +667,7 @@ export interface FileRouteTypes {
     | '/master/'
     | '/api/public/auth-email-hook'
     | '/api/public/google-callback'
+    | '/api/public/google-callback-master'
     | '/api/public/whatsapp-webhook'
     | '/api/public/billing/webhook'
     | '/api/public/hooks/process-campaigns'
@@ -676,6 +689,7 @@ export interface RootRouteChildren {
   CsatTokenRoute: typeof CsatTokenRoute
   ApiPublicAuthEmailHookRoute: typeof ApiPublicAuthEmailHookRoute
   ApiPublicGoogleCallbackRoute: typeof ApiPublicGoogleCallbackRoute
+  ApiPublicGoogleCallbackMasterRoute: typeof ApiPublicGoogleCallbackMasterRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicBillingWebhookRoute: typeof ApiPublicBillingWebhookRoute
   ApiPublicHooksProcessCampaignsRoute: typeof ApiPublicHooksProcessCampaignsRoute
@@ -1027,6 +1041,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGoogleCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/google-callback-master': {
+      id: '/api/public/google-callback-master'
+      path: '/api/public/google-callback-master'
+      fullPath: '/api/public/google-callback-master'
+      preLoaderRoute: typeof ApiPublicGoogleCallbackMasterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/whatsapp-webhook': {
       id: '/api/public/whatsapp-webhook'
       path: '/api/public/whatsapp-webhook'
@@ -1168,6 +1189,7 @@ const rootRouteChildren: RootRouteChildren = {
   CsatTokenRoute: CsatTokenRoute,
   ApiPublicAuthEmailHookRoute: ApiPublicAuthEmailHookRoute,
   ApiPublicGoogleCallbackRoute: ApiPublicGoogleCallbackRoute,
+  ApiPublicGoogleCallbackMasterRoute: ApiPublicGoogleCallbackMasterRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicBillingWebhookRoute: ApiPublicBillingWebhookRoute,
   ApiPublicHooksProcessCampaignsRoute: ApiPublicHooksProcessCampaignsRoute,

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { brand } from "@/config/brand";
-import { Loader2, Check, Building2, MapPin, Palette, Bot, PartyPopper } from "lucide-react";
+import { brand, supportWhatsappUrl } from "@/config/brand";
+import { Loader2, Check, Building2, MapPin, Palette, Bot, PartyPopper, CalendarClock, MessageCircle, CheckCircle2 } from "lucide-react";
 import { maskCpf, maskCnpj, maskPhone, maskCep } from "@/lib/masks";
+import { listAvailableSlots, createSpecialistBooking } from "@/lib/specialist-booking.functions";
 
 type Search = { checkout?: string };
 
@@ -27,6 +29,7 @@ const STEPS = [
   { key: "endereco", label: "Endereço", icon: MapPin },
   { key: "identidade", label: "Identidade", icon: Palette },
   { key: "agente", label: "Agente IA", icon: Bot },
+  { key: "agendamento", label: "Onboarding", icon: CalendarClock },
   { key: "concluir", label: "Concluir", icon: PartyPopper },
 ] as const;
 
@@ -77,6 +80,41 @@ function Onboarding() {
     sobre_empresa: "",
     produtos_servicos: "",
   });
+
+  // Agendamento de onboarding com especialista
+  const fetchSlots = useServerFn(listAvailableSlots);
+  const bookSlot = useServerFn(createSpecialistBooking);
+  const [slotsState, setSlotsState] = useState<{
+    connected: boolean;
+    days: { date: string; label: string; slots: { start: string; end: string; label: string }[] }[];
+    existingBooking: { scheduled_start: string; scheduled_end: string } | null;
+  } | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(0);
+  const [booking, setBooking] = useState(false);
+
+  useEffect(() => {
+    if (step !== 4 || slotsState) return;
+    setSlotsLoading(true);
+    fetchSlots()
+      .then(setSlotsState)
+      .catch(() => setSlotsState({ connected: false, days: [], existingBooking: null }))
+      .finally(() => setSlotsLoading(false));
+  }, [step]);
+
+  async function confirmSlot(start: string) {
+    setBooking(true);
+    try {
+      await bookSlot({ data: { start, contatoNome: nomeFantasia || null, contatoTelefone: telefone || null } });
+      toast.success("Onboarding agendado!");
+      setSlotsState((s) => (s ? { ...s, existingBooking: { scheduled_start: start, scheduled_end: start } } : s));
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao agendar");
+      void fetchSlots().then(setSlotsState).catch(() => {});
+    } finally {
+      setBooking(false);
+    }
+  }
 
   // Sem empresa? Vai para checkout primeiro
   useEffect(() => {
@@ -351,6 +389,72 @@ function Onboarding() {
         )}
 
         {step === 4 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-bold font-display flex items-center gap-2"><CalendarClock className="size-5" /> Marque seu onboarding</h2>
+              <p className="text-sm text-muted-foreground mt-1">Um especialista faz o setup da sua IA junto com você numa call rápida.</p>
+            </div>
+
+            {slotsLoading ? (
+              <div className="grid place-items-center py-10"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+            ) : slotsState?.existingBooking ? (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-center gap-3">
+                <CheckCircle2 className="size-5 text-primary shrink-0" />
+                <div>
+                  <div className="font-semibold text-sm">Você já marcou seu onboarding</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(slotsState.existingBooking.scheduled_start).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full", timeStyle: "short" })}
+                  </div>
+                </div>
+              </div>
+            ) : !slotsState?.connected ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Agendamento online temporariamente indisponível — nossa equipe vai entrar em contato pra marcar
+                  com você. Se preferir, chama a gente agora:
+                </p>
+                <a href={supportWhatsappUrl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm"><MessageCircle className="size-3.5 mr-1.5" /> Falar no WhatsApp</Button>
+                </a>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {slotsState.days.map((d, i) => (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => setSelectedDay(i)}
+                      className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border capitalize ${
+                        i === selectedDay ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {(slotsState.days[selectedDay]?.slots ?? []).length === 0 && (
+                    <p className="col-span-full text-sm text-muted-foreground py-4 text-center">Sem horários livres neste dia.</p>
+                  )}
+                  {(slotsState.days[selectedDay]?.slots ?? []).map((s) => (
+                    <button
+                      key={s.start}
+                      type="button"
+                      disabled={booking}
+                      onClick={() => confirmSlot(s.start)}
+                      className="px-3 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary hover:bg-primary/5 disabled:opacity-50 transition"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {step === 5 && (
           <div className="text-center py-6 space-y-4">
             <div className="size-16 mx-auto rounded-full bg-primary/10 grid place-items-center">
               <PartyPopper className="size-8 text-primary" />
