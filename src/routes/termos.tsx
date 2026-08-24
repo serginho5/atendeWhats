@@ -24,7 +24,7 @@ function TermosPage() {
             <h2 className="text-xl font-semibold text-slate-900">1. Quem somos</h2>
             <p className="mt-2">
               Estes Termos regulam o uso do serviço {brand.name} ("Serviço"), fornecido por
-              <strong> {brand.name}</strong> ("nós", "nosso"). Ao usar o Serviço, você concorda com
+              <strong> AW3S Agência Digital</strong> ("nós", "nosso"). Ao usar o Serviço, você concorda com
               estes Termos. Se não concordar, não utilize o Serviço.
             </p>
           </section>
@@ -62,7 +62,7 @@ function TermosPage() {
             <h2 className="text-xl font-semibold text-slate-900">5. Propriedade intelectual</h2>
             <p className="mt-2">
               Todo o software, marca, documentação e materiais do Serviço são de propriedade
-              do {brand.name}. Concedemos a você uma licença limitada, não exclusiva e
+              da AW3S Agência Digital. Concedemos a você uma licença limitada, não exclusiva e
               intransferível para usar o Serviço conforme o plano contratado.
             </p>
           </section>
@@ -120,7 +120,7 @@ function TermosPage() {
             <h2 className="text-xl font-semibold text-slate-900">11. Lei aplicável</h2>
             <p className="mt-2">
               Estes Termos são regidos pelas leis do Brasil. Fica eleito o foro do domicílio
-              do {brand.name} para dirimir controvérsias, salvo disposição legal em contrário.
+              da AW3S Agência Digital para dirimir controvérsias, salvo disposição legal em contrário.
             </p>
           </section>
 

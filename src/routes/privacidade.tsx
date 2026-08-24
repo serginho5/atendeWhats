@@ -23,7 +23,7 @@ function PrivacidadePage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">1. Controlador dos dados</h2>
             <p className="mt-2">
-              <strong>{brand.name}</strong> atua como controlador dos dados pessoais tratados
+              <strong>AW3S Agência Digital</strong> atua como controlador dos dados pessoais tratados
               no âmbito do Serviço, conforme a LGPD (Lei nº 13.709/2018) e demais leis
               aplicáveis.
             </p>
