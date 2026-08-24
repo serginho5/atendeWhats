@@ -893,7 +893,7 @@ function Footer() {
             </ul>
           </div>
         </div>
-        <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row gap-3 items-center justify-between text-xs text-white/40">
+        <div className="mt-12 pt-6 border-t border-white/10 flex flex-col md:flex-row gap-3 items-center justify-between text-xs text-white/40 text-center md:text-left">
           <span>© {new Date().getFullYear()} {brand.name}. Todos os direitos reservados.</span>
           <span>Feito com ❤️ por AW3S.</span>
         </div>
