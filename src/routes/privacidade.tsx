@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { brand } from "@/config/brand";
 
 export const Route = createFileRoute("/privacidade")({
   head: () => ({
     meta: [
-      { title: "Política de Privacidade — ATENDE ZAP" },
-      { name: "description", content: "Como o ATENDE ZAP coleta, usa e protege seus dados." },
+      { title: `Política de Privacidade — ${brand.name}` },
+      { name: "description", content: `Como o ${brand.name} coleta, usa e protege seus dados.` },
     ],
   }),
   component: PrivacidadePage,
@@ -22,7 +23,7 @@ function PrivacidadePage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">1. Controlador dos dados</h2>
             <p className="mt-2">
-              <strong>ATENDE ZAP</strong> atua como controlador dos dados pessoais tratados
+              <strong>{brand.name}</strong> atua como controlador dos dados pessoais tratados
               no âmbito do Serviço, conforme a LGPD (Lei nº 13.709/2018) e demais leis
               aplicáveis.
             </p>
@@ -35,7 +36,7 @@ function PrivacidadePage() {
               <li><strong>Conteúdo:</strong> mensagens, contatos e mídias que você processa no Serviço.</li>
               <li><strong>Uso e telemetria:</strong> logs, IP, dispositivo, navegador.</li>
               <li><strong>Suporte:</strong> conteúdo de tickets e comunicações.</li>
-              <li><strong>Cobrança:</strong> tratada pela Paddle (MoR) — não armazenamos dados de cartão.</li>
+              <li><strong>Cobrança:</strong> tratada pela Kiwify — não armazenamos dados de cartão.</li>
             </ul>
           </section>
 
@@ -55,8 +56,8 @@ function PrivacidadePage() {
             <p className="mt-2">Compartilhamos dados apenas com:</p>
             <ul className="mt-2 list-disc pl-6 space-y-1">
               <li>
-                <strong>Paddle.com</strong> — atua como Merchant of Record para processar
-                pagamentos, assinaturas, impostos e faturamento.
+                <strong>Kiwify</strong> — processa pagamentos, assinaturas e faturamento das
+                transações.
               </li>
               <li>Provedores de hospedagem, banco de dados e analytics (subprocessadores).</li>
               <li>Consultores profissionais (jurídico, contábil) quando necessário.</li>

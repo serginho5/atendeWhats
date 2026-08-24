@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { brand } from "@/config/brand";
 
 export const Route = createFileRoute("/termos")({
   head: () => ({
     meta: [
-      { title: "Termos e Condições — ATENDE ZAP" },
-      { name: "description", content: "Termos e Condições de uso do ATENDE ZAP." },
+      { title: `Termos e Condições — ${brand.name}` },
+      { name: "description", content: `Termos e Condições de uso do ${brand.name}.` },
     ],
   }),
   component: TermosPage,
@@ -22,8 +23,8 @@ function TermosPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">1. Quem somos</h2>
             <p className="mt-2">
-              Estes Termos regulam o uso do serviço ATENDE ZAP ("Serviço"), fornecido por
-              <strong> ATENDE ZAP</strong> ("nós", "nosso"). Ao usar o Serviço, você concorda com
+              Estes Termos regulam o uso do serviço {brand.name} ("Serviço"), fornecido por
+              <strong> {brand.name}</strong> ("nós", "nosso"). Ao usar o Serviço, você concorda com
               estes Termos. Se não concordar, não utilize o Serviço.
             </p>
           </section>
@@ -40,7 +41,7 @@ function TermosPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">3. Descrição do Serviço</h2>
             <p className="mt-2">
-              O ATENDE ZAP oferece automação e gestão de atendimento via WhatsApp, incluindo
+              O {brand.name} oferece automação e gestão de atendimento via WhatsApp, incluindo
               recursos de mensageria, fluxos automatizados e integrações.
             </p>
           </section>
@@ -61,7 +62,7 @@ function TermosPage() {
             <h2 className="text-xl font-semibold text-slate-900">5. Propriedade intelectual</h2>
             <p className="mt-2">
               Todo o software, marca, documentação e materiais do Serviço são de propriedade
-              do ATENDE ZAP. Concedemos a você uma licença limitada, não exclusiva e
+              do {brand.name}. Concedemos a você uma licença limitada, não exclusiva e
               intransferível para usar o Serviço conforme o plano contratado.
             </p>
           </section>
@@ -69,17 +70,15 @@ function TermosPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">6. Pagamentos e assinaturas</h2>
             <p className="mt-2">
-              Nosso processo de pedidos é conduzido por nosso revendedor online Paddle.com.
-              <strong> Paddle.com é o Merchant of Record (MoR) de todos os nossos pedidos.</strong>
-              A Paddle realiza o atendimento ao cliente em questões de cobrança e processa
-              devoluções. Os termos completos de compra estão disponíveis em
-              {" "}
-              <a className="underline" href="https://www.paddle.com/legal/checkout-buyer-terms" target="_blank" rel="noopener noreferrer">Paddle Buyer Terms</a>.
+              As cobranças do Serviço — a taxa única de implementação e a mensalidade do plano
+              contratado — são processadas pela <strong>Kiwify</strong>, nossa plataforma de
+              pagamentos, por cartão, Pix ou boleto. A Kiwify é responsável pelo processamento
+              da transação e pela emissão de nota fiscal, quando aplicável.
             </p>
             <p className="mt-2">
               Assinaturas são renovadas automaticamente conforme a periodicidade contratada,
-              até que sejam canceladas. Você pode gerenciar sua assinatura a qualquer momento
-              em paddle.net ou em sua conta.
+              até que sejam canceladas. Você pode cancelar sua assinatura a qualquer momento
+              pela sua conta ou entrando em contato com nosso suporte.
             </p>
           </section>
 
@@ -121,15 +120,16 @@ function TermosPage() {
             <h2 className="text-xl font-semibold text-slate-900">11. Lei aplicável</h2>
             <p className="mt-2">
               Estes Termos são regidos pelas leis do Brasil. Fica eleito o foro do domicílio
-              do ATENDE ZAP para dirimir controvérsias, salvo disposição legal em contrário.
+              do {brand.name} para dirimir controvérsias, salvo disposição legal em contrário.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-slate-900">12. Contato</h2>
             <p className="mt-2">
-              Dúvidas sobre estes Termos: entre em contato pelos canais do Serviço ou via
-              paddle.net para questões de cobrança.
+              Dúvidas sobre estes Termos: entre em contato pelos canais do Serviço. Para
+              questões de cobrança, você também pode falar com o suporte da Kiwify pelo link
+              recebido no e-mail de confirmação da compra.
             </p>
           </section>
         </div>
