@@ -1,16 +1,15 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { brand, supportWhatsappUrl } from "@/config/brand";
-import { Loader2, Check, Building2, MapPin, Palette, Bot, PartyPopper, CalendarClock, MessageCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Check, Building2, MapPin, Palette, PartyPopper, CalendarClock, MessageCircle, CheckCircle2 } from "lucide-react";
 import { maskCpf, maskCnpj, maskPhone, maskCep } from "@/lib/masks";
 import { listAvailableSlots, createSpecialistBooking } from "@/lib/specialist-booking.functions";
 
@@ -23,15 +22,6 @@ export const Route = createFileRoute("/app/onboarding")({
   head: () => ({ meta: [{ title: `${brand.name} — Bem-vindo` }] }),
   component: Onboarding,
 });
-
-const STEPS = [
-  { key: "empresa", label: "Empresa", icon: Building2 },
-  { key: "endereco", label: "Endereço", icon: MapPin },
-  { key: "identidade", label: "Identidade", icon: Palette },
-  { key: "agente", label: "Agente IA", icon: Bot },
-  { key: "agendamento", label: "Onboarding", icon: CalendarClock },
-  { key: "concluir", label: "Concluir", icon: PartyPopper },
-] as const;
 
 const SEGMENTOS = [
   "Varejo / E-commerce", "Alimentação", "Beleza e Estética", "Saúde", "Educação",
@@ -72,14 +62,15 @@ function Onboarding() {
   const [primaryColor, setPrimaryColor] = useState(ctx.company?.primary_color ?? brand.primary);
   const [logoUrl, setLogoUrl] = useState(ctx.company?.logo_url ?? "");
 
-  // Agente
-  const [agente, setAgente] = useState({
+  // Agente — sem tela própria no onboarding; o especialista configura na call
+  // de agendamento. Fica só com valores padrão até o especialista ajustar.
+  const agente = {
     nome_agente: "Atendente Virtual",
     papel_objetivo: "Atender clientes, tirar dúvidas e ajudar a fechar vendas.",
     estilo_comunicacao: "Cordial, profissional e objetivo.",
     sobre_empresa: "",
     produtos_servicos: "",
-  });
+  };
 
   // Agendamento de onboarding com especialista
   const fetchSlots = useServerFn(listAvailableSlots);
@@ -89,18 +80,34 @@ function Onboarding() {
     days: { date: string; label: string; slots: { start: string; end: string; label: string }[] }[];
     existingBooking: { scheduled_start: string; scheduled_end: string } | null;
   } | null>(null);
-  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(0);
   const [booking, setBooking] = useState(false);
 
+  // Carrega o status do agendamento assim que a página abre (não só quando o
+  // usuário chega no passo) — precisamos saber se a call já passou pra
+  // decidir se o passo aparece no stepper.
   useEffect(() => {
-    if (step !== 4 || slotsState) return;
     setSlotsLoading(true);
     fetchSlots()
       .then(setSlotsState)
       .catch(() => setSlotsState({ connected: false, days: [], existingBooking: null }))
       .finally(() => setSlotsLoading(false));
-  }, [step]);
+  }, []);
+
+  const appointmentPassed = !!slotsState?.existingBooking && new Date(slotsState.existingBooking.scheduled_start).getTime() < Date.now();
+
+  // Passo de agendamento some assim que a data marcada já passou.
+  const STEPS = useMemo(() => {
+    const steps = [
+      { key: "empresa", label: "Empresa", icon: Building2 },
+      { key: "endereco", label: "Endereço", icon: MapPin },
+      { key: "identidade", label: "Identidade", icon: Palette },
+    ];
+    if (!appointmentPassed) steps.push({ key: "agendamento", label: "Onboarding", icon: CalendarClock });
+    steps.push({ key: "concluir", label: "Concluir", icon: PartyPopper });
+    return steps;
+  }, [appointmentPassed]);
 
   async function confirmSlot(start: string) {
     setBooking(true);
@@ -142,8 +149,10 @@ function Onboarding() {
     if (c.cidade) setCidade(c.cidade);
     if (c.estado) setEstado(c.estado);
     if (typeof c.onboarding_step === "number" && c.onboarding_step > 0) {
-      setStep(Math.min(c.onboarding_step, STEPS.length - 1));
+      const savedStep = c.onboarding_step;
+      setStep((s) => Math.min(savedStep, STEPS.length - 1) || s);
     }
+    // eslint-disable-next-line
   }, [ctx.company]);
 
   // Toast pagamento aprovado
@@ -153,8 +162,15 @@ function Onboarding() {
     }
   }, [search.checkout]);
 
+  // Se o passo atual ficou fora do range depois que "agendamento" some do
+  // stepper, reancora no último passo válido.
+  useEffect(() => {
+    setStep((s) => Math.min(s, STEPS.length - 1));
+  }, [STEPS.length]);
+
   if (!ctx.company) return null;
   const companyId = ctx.company.id;
+  const currentKey = STEPS[step]?.key;
 
   async function persistPartial(nextStep: number) {
     const patch: any = {
@@ -183,14 +199,14 @@ function Onboarding() {
   }
 
   function validateStep(): string | null {
-    if (step === 0) {
+    if (currentKey === "empresa") {
       if (!nomeFantasia.trim()) return "Informe o nome da empresa.";
       if (!cnpjCpf.trim()) return tipoPessoa === "pj" ? "Informe o CNPJ." : "Informe o CPF.";
       if (!telefone.trim()) return "Informe o telefone.";
       if (!segmento) return "Selecione o segmento.";
       if (!porte) return "Selecione o porte.";
     }
-    if (step === 1) {
+    if (currentKey === "endereco") {
       if (!cep.trim()) return "Informe o CEP.";
       if (!cidade.trim()) return "Informe a cidade.";
       if (!estado.trim()) return "Informe o estado (UF).";
@@ -218,7 +234,8 @@ function Onboarding() {
     try {
       await persistPartial(STEPS.length - 1);
 
-      // Upsert agente (PK = company_id)
+      // Upsert agente (PK = company_id) — valores padrão; o especialista
+      // ajusta com o cliente na call de onboarding.
       await supabase.from("agent_config").upsert({
         company_id: companyId,
         user_id: ctx.user.id,
@@ -270,7 +287,7 @@ function Onboarding() {
       </div>
 
       <Card className="p-6 space-y-4">
-        {step === 0 && (
+        {currentKey === "empresa" && (
           <>
             <div className="flex gap-2">
               <button
@@ -338,7 +355,7 @@ function Onboarding() {
           </>
         )}
 
-        {step === 1 && (
+        {currentKey === "endereco" && (
           <>
             <div className="grid sm:grid-cols-3 gap-3">
               <Row label="CEP"><Input value={cep} onChange={(e) => setCep(maskCep(e.target.value))} placeholder="00000-000" inputMode="numeric" /></Row>
@@ -356,7 +373,7 @@ function Onboarding() {
           </>
         )}
 
-        {step === 2 && (
+        {currentKey === "identidade" && (
           <>
             <Row label="Cor primária da marca">
               <div className="flex items-center gap-3">
@@ -368,27 +385,7 @@ function Onboarding() {
           </>
         )}
 
-        {step === 3 && (
-          <>
-            <Row label="Nome do agente">
-              <Input value={agente.nome_agente} onChange={(e) => setAgente({ ...agente, nome_agente: e.target.value })} />
-            </Row>
-            <Row label="Papel e objetivo">
-              <Textarea value={agente.papel_objetivo} onChange={(e) => setAgente({ ...agente, papel_objetivo: e.target.value })} rows={2} />
-            </Row>
-            <Row label="Estilo de comunicação">
-              <Textarea value={agente.estilo_comunicacao} onChange={(e) => setAgente({ ...agente, estilo_comunicacao: e.target.value })} rows={2} />
-            </Row>
-            <Row label="Sobre a empresa">
-              <Textarea value={agente.sobre_empresa} onChange={(e) => setAgente({ ...agente, sobre_empresa: e.target.value })} rows={3} placeholder="O que faz, há quanto tempo, diferenciais…" />
-            </Row>
-            <Row label="Produtos / serviços">
-              <Textarea value={agente.produtos_servicos} onChange={(e) => setAgente({ ...agente, produtos_servicos: e.target.value })} rows={3} placeholder="Liste os principais produtos e serviços." />
-            </Row>
-          </>
-        )}
-
-        {step === 4 && (
+        {currentKey === "agendamento" && (
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-bold font-display flex items-center gap-2"><CalendarClock className="size-5" /> Marque seu onboarding</h2>
@@ -454,7 +451,7 @@ function Onboarding() {
           </div>
         )}
 
-        {step === 5 && (
+        {currentKey === "concluir" && (
           <div className="text-center py-6 space-y-4">
             <div className="size-16 mx-auto rounded-full bg-primary/10 grid place-items-center">
               <PartyPopper className="size-8 text-primary" />
