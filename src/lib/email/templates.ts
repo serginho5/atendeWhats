@@ -101,19 +101,19 @@ export function renderAuthEmail(kind: EmailKind, verifyUrl: string): { subject: 
   }
 }
 
-// E-mail de boas-vindas mandado pelo webhook de cobrança (não pelo hook de
-// auth) quando a primeira compra aprovada provisiona a conta — ver
-// provisionCompanyFromPurchase em src/routes/api/public/billing/webhook.ts.
-// Diferente dos e-mails acima, não usa link mágico de verificação: mostra
-// e-mail + senha de acesso direto e manda a pessoa pra tela de login normal.
+// E-mail de boas-vindas mandado na hora do cadastro (ver
+// src/lib/signup.functions.ts). `loginUrl` aqui é o action_link real de
+// confirmação do Supabase (admin.generateLink), não um link fixo — a conta
+// só fica liberada depois que a pessoa clica nesse botão: até lá,
+// signInWithPassword falha porque o e-mail ainda não foi confirmado.
 export function renderWelcomeEmail(opts: { nome: string | null; email: string; password: string; loginUrl: string }): { subject: string; html: string } {
   const primeiroNome = opts.nome?.trim().split(/\s+/)[0] || null;
   const saudacao = primeiroNome ? `Oi, ${primeiroNome}! 🎉` : "Oi! 🎉";
   return {
-    subject: `Seu acesso ao ${BRAND_NAME} está pronto`,
+    subject: `Confirme sua conta — ${BRAND_NAME}`,
     html: shell("Bem-vindo", `
       <h1 style="margin:0 0 12px;font-size:22px;color:#111827;">${saudacao}</h1>
-      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">Seu pagamento foi confirmado e sua conta no ${BRAND_NAME} já está pronta. É só entrar com os dados abaixo pra começar:</p>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">Sua conta no ${BRAND_NAME} está quase pronta. Guarde os dados de acesso abaixo e confirme seu e-mail pra liberar a entrada:</p>
       <table role="presentation" width="100%" cellPadding="0" cellSpacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;margin:0 0 24px;">
         <tr>
           <td style="padding:18px 20px;">
@@ -123,8 +123,8 @@ export function renderWelcomeEmail(opts: { nome: string | null; email: string; p
           </td>
         </tr>
       </table>
-      <p style="text-align:center;margin:0 0 20px;">${button("Entrar na minha conta", opts.loginUrl)}</p>
-      <p style="margin:0;font-size:12.5px;line-height:1.6;color:#6b7280;">Assim que entrar, se quiser, você pode trocar essa senha em <b>Configurações → Segurança</b>.</p>
+      <p style="text-align:center;margin:0 0 20px;">${button("Confirmar e-mail e entrar", opts.loginUrl)}</p>
+      <p style="margin:0;font-size:12.5px;line-height:1.6;color:#6b7280;">Sem confirmar o e-mail, o login com a senha acima não funciona ainda. Depois de entrar, se quiser, você pode trocar essa senha em <b>Configurações → Segurança</b>.</p>
     `),
   };
 }

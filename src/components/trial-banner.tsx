@@ -1,19 +1,21 @@
 import { AlertTriangle } from "lucide-react";
 import { trialDaysLeft, type CompanyRow } from "@/lib/tenant";
+import { PLAN_LABEL, normalizePlanSlug } from "@/lib/plan-features";
 import { Link } from "@tanstack/react-router";
 
 export function TrialBanner({ company }: { company: CompanyRow }) {
   if (company.status_cobranca !== "trial") return null;
   const days = trialDaysLeft(company.trial_ate);
+  const planNome = PLAN_LABEL[normalizePlanSlug(company.selected_plan_slug)];
 
   return (
     <div className="px-4 py-2.5 text-sm flex items-center justify-center gap-2 bg-red-600 text-white border-b border-red-700 font-medium">
       <AlertTriangle className="size-4 shrink-0" />
       <span>
         {days > 0 ? (
-          <>Período de teste — restam <b>{days} {days === 1 ? "dia" : "dias"}</b>. Cadastre seu cartão antes do fim do período de teste.</>
+          <>Período de teste (Plano {planNome}) — restam <b>{days} {days === 1 ? "dia" : "dias"}</b>. Escolha um plano antes do fim do período de teste.</>
         ) : (
-          <>Seu período de teste terminou. Ative seu plano para continuar.</>
+          <>Seu período de teste (Plano {planNome}) terminou. Escolha um plano para continuar.</>
         )}
       </span>
       <Link

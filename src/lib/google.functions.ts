@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 async function buildOrigin() {
   const { getRequest } = await import("@tanstack/react-start/server");
@@ -81,7 +82,7 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
     // Refresh if needed
     let accessToken = gi.access_token as string;
     if (gi.expiry && new Date(gi.expiry).getTime() < Date.now() + 60_000 && gi.refresh_token) {
-      const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+      const tokRes = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -90,7 +91,7 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
           refresh_token: gi.refresh_token as string,
           grant_type: "refresh_token",
         }),
-      });
+      }, 15000);
       const tok = await tokRes.json();
       if (tok.access_token) {
         accessToken = tok.access_token;
@@ -102,7 +103,7 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
     }
 
     const calendarId = gi.calendar_id || "primary";
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+    const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -111,7 +112,7 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
         start: { dateTime: data.inicio },
         end: { dateTime: data.fim },
       }),
-    });
+    }, 15000);
     if (!res.ok) throw new Error(`Google API: ${res.status}`);
     const ev = await res.json();
 

@@ -1,28 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyMasterState, getPublicOrigin } from "@/lib/google.server";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 const SHEET_HEADERS = ["Data/Hora", "Empresa", "Contato", "E-mail", "Telefone", "Plano"];
 
 async function ensureSpreadsheet(accessToken: string): Promise<string> {
-  const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+  const createRes = await fetchWithTimeout("https://sheets.googleapis.com/v4/spreadsheets", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       properties: { title: "Atende+Empresas — Agendamentos de Onboarding" },
       sheets: [{ properties: { title: "Agendamentos" } }],
     }),
-  });
+  }, 15000);
   if (!createRes.ok) throw new Error(`Falha ao criar planilha: ${createRes.status} ${await createRes.text()}`);
   const sheet = await createRes.json();
   const spreadsheetId = sheet.spreadsheetId as string;
 
-  await fetch(
+  await fetchWithTimeout(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Agendamentos!A1:F1?valueInputOption=USER_ENTERED`,
     {
       method: "PUT",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ values: [SHEET_HEADERS] }),
     },
+    15000,
   );
 
   return spreadsheetId;
@@ -43,14 +45,14 @@ export const Route = createFileRoute("/api/public/google-callback-master")({
         if (!clientId || !clientSecret) return new Response("oauth not configured", { status: 500 });
 
         const redirectUri = `${getPublicOrigin(request)}/api/public/google-callback-master`;
-        const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+        const tokRes = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             code, client_id: clientId, client_secret: clientSecret,
             redirect_uri: redirectUri, grant_type: "authorization_code",
           }),
-        });
+        }, 15000);
         const tok = await tokRes.json();
         if (!tok.access_token) {
           return new Response(`token exchange failed: ${JSON.stringify(tok)}`, { status: 400 });
@@ -58,9 +60,9 @@ export const Route = createFileRoute("/api/public/google-callback-master")({
 
         let email: string | null = null;
         try {
-          const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+          const infoRes = await fetchWithTimeout("https://www.googleapis.com/oauth2/v2/userinfo", {
             headers: { Authorization: `Bearer ${tok.access_token}` },
-          });
+          }, 15000);
           const info = await infoRes.json();
           email = info?.email ?? null;
         } catch {}

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyState, getPublicOrigin } from "@/lib/google.server";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export const Route = createFileRoute("/api/public/google-callback")({
   server: {
@@ -17,14 +18,14 @@ export const Route = createFileRoute("/api/public/google-callback")({
         if (!clientId || !clientSecret) return new Response("oauth not configured", { status: 500 });
 
         const redirectUri = `${getPublicOrigin(request)}/api/public/google-callback`;
-        const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+        const tokRes = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             code, client_id: clientId, client_secret: clientSecret,
             redirect_uri: redirectUri, grant_type: "authorization_code",
           }),
-        });
+        }, 15000);
         const tok = await tokRes.json();
         if (!tok.access_token) {
           return new Response(`token exchange failed: ${JSON.stringify(tok)}`, { status: 400 });
@@ -33,9 +34,9 @@ export const Route = createFileRoute("/api/public/google-callback")({
         // Get email
         let email: string | null = null;
         try {
-          const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+          const infoRes = await fetchWithTimeout("https://www.googleapis.com/oauth2/v2/userinfo", {
             headers: { Authorization: `Bearer ${tok.access_token}` },
-          });
+          }, 15000);
           const info = await infoRes.json();
           email = info?.email ?? null;
         } catch {}

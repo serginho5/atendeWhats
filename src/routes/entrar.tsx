@@ -1,12 +1,14 @@
 import { createFileRoute, redirect, useNavigate, Link, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
+  Sparkles,
   Loader2,
   Bot,
   KanbanSquare,
@@ -14,15 +16,20 @@ import {
   Zap,
   ArrowLeft,
   CheckCircle2,
+  MailCheck,
 } from "lucide-react";
 import { brand } from "@/config/brand";
+import { createTrialAccount } from "@/lib/signup.functions";
 
-type Search = { plano?: string };
+type Search = { modo?: "login" | "signup"; plano?: string };
+
+type PlanInfo = { nome: string; trialDays: number };
 
 export const Route = createFileRoute("/entrar")({
   ssr: false,
-  head: () => ({ meta: [{ title: `${brand.name} — Entrar` }] }),
+  head: () => ({ meta: [{ title: `${brand.name} — Começar` }] }),
   validateSearch: (s: Record<string, unknown>): Search => ({
+    modo: s.modo === "login" ? "login" : "signup",
     plano: typeof s.plano === "string" ? s.plano : undefined,
   }),
   beforeLoad: async ({ search }) => {
@@ -40,9 +47,28 @@ const emailSchema = z.string().email("E-mail inválido");
 function EntrarPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/entrar" }) as Search;
+  const signup = useServerFn(createTrialAccount);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [needsPassword, setNeedsPassword] = useState(search.modo === "login");
   const [loading, setLoading] = useState(false);
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+
+  useEffect(() => {
+    if (!search.plano) { setPlanInfo(null); return; }
+    let cancelled = false;
+    supabase
+      .from("plan")
+      .select("slug, nome, trial_days")
+      .eq("slug", search.plano)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setPlanInfo({ nome: data.nome, trialDays: data.trial_days });
+      });
+    return () => { cancelled = true; };
+  }, [search.plano]);
 
   async function routeAfterAuth() {
     const { data: u } = await supabase.auth.getUser();
@@ -68,11 +94,36 @@ function EntrarPage() {
     if (!v.success) return toast.error(v.error.issues[0].message);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) return toast.error("E-mail ou senha incorretos. Tente novamente ou recupere sua senha.");
-    toast.success("Bem-vindo de volta!");
-    return routeAfterAuth();
+    if (needsPassword) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) {
+        if (error.message.toLowerCase().includes("email not confirmed")) {
+          return toast.error("Confirme seu e-mail antes de entrar.", { description: "Procure o e-mail com seu login e senha e clique no botão de confirmação." });
+        }
+        return toast.error("E-mail ou senha incorretos. Tente novamente ou recupere sua senha.");
+      }
+      toast.success("Bem-vindo de volta!");
+      return routeAfterAuth();
+    }
+
+    // Conta + senha nascem no servidor (ver src/lib/signup.functions.ts), que
+    // manda um único e-mail com e-mail+senha e o link real de confirmação.
+    // O login só passa a funcionar depois que esse link é clicado.
+    try {
+      await signup({ data: { email, plano: search.plano } });
+      setLoading(false);
+      setEmailSent(true);
+    } catch (err: any) {
+      setLoading(false);
+      const msg = (err?.message || "").toLowerCase();
+      if (msg.includes("já existe") || msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+        setNeedsPassword(true);
+        toast.message("Já existe uma conta com esse e-mail.", { description: "Digite sua senha para continuar." });
+        return;
+      }
+      toast.error(err?.message || "Falha ao criar conta");
+    }
   }
 
   return (
@@ -163,57 +214,109 @@ function EntrarPage() {
               />
 
               <div className="relative">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--brand-soft)] border border-[color:var(--brand)]/20 text-[11px] font-semibold text-[color:var(--brand-text)] mb-3">
-                  <span className="size-1.5 rounded-full bg-[color:var(--brand)] dot-pulse" />
-                  Acesso à conta
-                </div>
-
-                <h1 className="font-display text-[26px] sm:text-[28px] font-extrabold leading-tight tracking-tight">
-                  Bem-vindo de volta
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1.5 mb-6">
-                  Entre com o e-mail e senha da sua conta {brand.name}.
-                </p>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email">E-mail</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      autoFocus
-                      placeholder="voce@empresa.com"
-                      className="h-11"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="pwd">Senha</Label>
-                      <Link to="/esqueci-senha" className="text-[11.5px] font-medium text-muted-foreground hover:text-[color:var(--brand-text)] transition-colors">
-                        Esqueci minha senha
-                      </Link>
+                {emailSent ? (
+                  <div className="text-center py-2">
+                    <div className="size-14 mx-auto rounded-full bg-[color:var(--brand-soft)] grid place-items-center mb-4">
+                      <MailCheck className="size-7 text-[color:var(--brand-text)]" />
                     </div>
-                    <Input id="pwd" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11" />
+                    <h1 className="font-display text-[24px] font-extrabold leading-tight tracking-tight">
+                      Confira seu e-mail
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                      Mandamos um e-mail pra <span className="font-semibold text-foreground">{email}</span> com seu login, senha e um botão de confirmação.
+                      Clique nele pra liberar o acesso — o login só funciona depois disso.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEmailSent(false)}
+                      className="text-[12.5px] text-muted-foreground hover:text-foreground underline underline-offset-2 mt-5"
+                    >
+                      Errei o e-mail, quero corrigir
+                    </button>
                   </div>
+                ) : (
+                  <>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--brand-soft)] border border-[color:var(--brand)]/20 text-[11px] font-semibold text-[color:var(--brand-text)] mb-3">
+                      <span className="size-1.5 rounded-full bg-[color:var(--brand)] dot-pulse" />
+                      {needsPassword ? "Acesso à conta" : "7 dias grátis, sem cartão"}
+                    </div>
 
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    size="lg"
-                    className="w-full h-12 bg-gradient-brand text-primary-foreground hover:opacity-95 font-semibold text-[14.5px] shadow-[0_8px_24px_-10px_rgba(22,163,74,.6)]"
-                  >
-                    {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
-                    Entrar
-                  </Button>
+                    <h1 className="font-display text-[26px] sm:text-[28px] font-extrabold leading-tight tracking-tight">
+                      {needsPassword ? "Bem-vindo de volta" : "Comece grátis agora"}
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1.5 mb-6">
+                      {needsPassword
+                        ? `Entre com o e-mail e senha da sua conta ${brand.name}.`
+                        : "Informe seu e-mail. A gente cria sua conta e manda o login por lá."}
+                    </p>
 
-                  <p className="text-[11.5px] text-muted-foreground text-center pt-1 leading-relaxed">
-                    Ainda não é cliente? <a href="/#planos" className="underline underline-offset-2 hover:text-foreground">Veja os planos</a> — sua conta é criada automaticamente assim que o pagamento é confirmado.
-                  </p>
-                </form>
+                    {planInfo && (
+                      <div className="mb-5 rounded-xl border border-[color:var(--brand)]/30 bg-[color:var(--brand-soft)] p-4">
+                        <div className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-[0.14em] text-[color:var(--brand-text)]">
+                          <Sparkles className="size-3.5" /> Plano escolhido
+                        </div>
+                        <div className="mt-1 flex items-baseline justify-between">
+                          <div className="font-display text-lg font-bold">{planInfo.nome}</div>
+                          <div className="text-sm font-semibold">{planInfo.trialDays} dias grátis</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="email">E-mail</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          autoFocus
+                          placeholder="voce@empresa.com"
+                          className="h-11"
+                        />
+                      </div>
+
+                      {needsPassword && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="pwd">Senha</Label>
+                            <Link to="/esqueci-senha" className="text-[11.5px] font-medium text-muted-foreground hover:text-[color:var(--brand-text)] transition-colors">
+                              Esqueci minha senha
+                            </Link>
+                          </div>
+                          <Input id="pwd" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="h-11" />
+                        </div>
+                      )}
+
+                      <Button
+                        type="submit"
+                        disabled={loading}
+                        size="lg"
+                        className="w-full h-12 bg-gradient-brand text-primary-foreground hover:opacity-95 font-semibold text-[14.5px] shadow-[0_8px_24px_-10px_rgba(22,163,74,.6)]"
+                      >
+                        {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
+                        {needsPassword ? "Entrar" : "Começar grátis"}
+                      </Button>
+
+                      <p className="text-[11.5px] text-muted-foreground text-center pt-1 leading-relaxed">
+                        {needsPassword ? (
+                          <>Ainda não é cliente?{" "}
+                            <button type="button" onClick={() => setNeedsPassword(false)} className="underline underline-offset-2 hover:text-foreground">
+                              Comece seu teste grátis
+                            </button>
+                          </>
+                        ) : (
+                          <>Já tem conta?{" "}
+                            <button type="button" onClick={() => setNeedsPassword(true)} className="underline underline-offset-2 hover:text-foreground">
+                              Entrar
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    </form>
+                  </>
+                )}
               </div>
             </div>
 

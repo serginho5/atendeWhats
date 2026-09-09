@@ -1,4 +1,5 @@
 import * as QRCode from "qrcode";
+import { fetchWithTimeout } from "./fetch-with-timeout";
 
 // Wrapper server-only para a Evolution API v2.
 // Arquivo *.server.ts é bloqueado do bundle client.
@@ -30,11 +31,11 @@ async function evo<T = any>(
   };
   let res: Response;
   try {
-    res = await fetch(`${url}${path}`, {
+    res = await fetchWithTimeout(`${url}${path}`, {
       ...init,
       headers,
       body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
-    });
+    }, 15000);
   } catch (e: any) {
     throw new Error(`Evolution API indisponível: ${e?.message || "falha de rede"}.${SUPPORT_SUFFIX}`);
   }

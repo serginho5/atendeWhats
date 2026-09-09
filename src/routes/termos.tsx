@@ -70,10 +70,12 @@ function TermosPage() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900">6. Pagamentos e assinaturas</h2>
             <p className="mt-2">
-              As cobranças do Serviço — a taxa única de implementação e a mensalidade do plano
-              contratado — são processadas pela <strong>Kiwify</strong>, nossa plataforma de
-              pagamentos, por cartão, Pix ou boleto. A Kiwify é responsável pelo processamento
-              da transação e pela emissão de nota fiscal, quando aplicável.
+              O Serviço oferece um período de teste gratuito de 7 dias, sem necessidade de
+              cartão de crédito. Ao final do período de teste, a continuidade do acesso depende
+              da contratação de um plano pago. As cobranças da mensalidade do plano contratado
+              são processadas pela <strong>Kiwify</strong>, nossa plataforma de pagamentos, por
+              cartão, Pix ou boleto. A Kiwify é responsável pelo processamento da transação e
+              pela emissão de nota fiscal, quando aplicável.
             </p>
             <p className="mt-2">
               Assinaturas são renovadas automaticamente conforme a periodicidade contratada,

@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import { createCheckoutCompany } from "@/lib/checkout.functions";
 import { useServerFn } from "@tanstack/react-start";
-
-const ATIVACAO_CENTS = 49900; // R$ 499,00 — implementação, pagamento único
+import { trialDaysLeft } from "@/lib/tenant";
 
 type Search = { plano?: string };
 
@@ -108,18 +107,21 @@ function CheckoutPage() {
   const [selected, setSelected] = useState<string | null>(search.plano ?? null);
   const [creating, setCreating] = useState(false);
   const [waiting, setWaiting] = useState(false);
-  const [companyId, setCompanyId] = useState<string | null>(ctx.company?.id ?? null);
 
+  // Modo: "trial" (sem empresa, oferecer teste grátis) vs "paywall" (empresa existe mas precisa pagar)
   const hasCompany = !!ctx.company;
+  const trialActive =
+    hasCompany && ctx.company!.status_cobranca === "trial" && trialDaysLeft(ctx.company!.trial_ate) > 0;
+  const paywallMode = hasCompany && !trialActive && ctx.company!.status_cobranca !== "ativo";
   const isSuspenso = hasCompany && ctx.company!.status_cobranca === "suspenso";
 
-  // Empresa já ativa → não deveria estar aqui
+  // Empresa ativa ou em trial ainda válido → não deveria estar aqui
   useEffect(() => {
     if (!ctx.company) return;
-    if (ctx.company.status_cobranca === "ativo") {
+    if (ctx.company.status_cobranca === "ativo" || trialActive) {
       navigate({ to: ctx.company.onboarding_completed ? "/app/dashboard" : "/app/onboarding", replace: true });
     }
-  }, [ctx.company, navigate]);
+  }, [ctx.company, navigate, trialActive]);
 
   useEffect(() => {
     supabase.from("plan").select("*").eq("ativo", true).order("ordem").then(({ data }) => {
@@ -136,14 +138,15 @@ function CheckoutPage() {
     });
   }, []);
 
-  // Polling: assim que o webhook de pagamento confirmar, libera o acesso
+  // Polling em modo paywall: assim que webhook ativar, libera
   useEffect(() => {
-    if (!waiting || !companyId) return;
+    if (!waiting || !ctx.company) return;
+    const id = ctx.company.id;
     const interval = setInterval(async () => {
       const { data: comp } = await supabase
         .from("company")
         .select("id, status_cobranca, onboarding_completed")
-        .eq("id", companyId)
+        .eq("id", id)
         .maybeSingle();
       if (comp?.status_cobranca === "ativo") {
         clearInterval(interval);
@@ -154,42 +157,49 @@ function CheckoutPage() {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [waiting, companyId]);
+  }, [waiting, ctx.company]);
 
   const plano = useMemo(() => plans.find((p) => p.slug === selected), [plans, selected]);
 
-  async function ativarPlano() {
+  async function iniciarTrial() {
     if (!plano) return toast.error("Selecione um plano.");
-    if (!plano.checkout_url) {
-      return toast.error("Este plano ainda não tem link de checkout configurado. Avise o administrador.");
-    }
     setCreating(true);
     try {
-      let id = companyId;
-      if (!id) {
-        const r = await createCompany({ data: { nome: defaultCompanyName(ctx.user.email), plano_slug: plano.slug } });
-        id = r.companyId;
-        setCompanyId(id);
-      }
-      const url = buildCheckoutUrl(plano.checkout_url, ctx.user.email, id);
-      window.open(url, "_blank", "noopener,noreferrer");
-      setWaiting(true);
+      await createCompany({ data: { nome: defaultCompanyName(ctx.user.email), plano_slug: plano.slug } });
+      toast.success(`Teste grátis de ${plano.trial_days} dias iniciado!`);
+      window.location.href = "/app/onboarding";
     } catch (e: any) {
-      toast.error(e.message || "Falha ao iniciar ativação");
+      toast.error(e.message || "Falha ao iniciar teste");
     } finally {
       setCreating(false);
     }
   }
 
+  async function pagarAgora() {
+    if (!plano) return toast.error("Selecione um plano.");
+    if (!plano.checkout_url) {
+      return toast.error("Este plano ainda não tem link de checkout configurado. Avise o administrador.");
+    }
+    const url = buildCheckoutUrl(plano.checkout_url, ctx.user.email, ctx.company?.id ?? null);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setWaiting(true);
+  }
+
   const headerBadge = isSuspenso
     ? { icon: <Lock className="size-3.5 mr-1.5" />, text: "Pagamento pendente" }
-    : { icon: <Sparkles className="size-3.5 mr-1.5" />, text: "Implementação incluída" };
+    : paywallMode
+    ? { icon: <Lock className="size-3.5 mr-1.5" />, text: "Seu período de teste terminou" }
+    : { icon: <Sparkles className="size-3.5 mr-1.5" />, text: `${plans[0]?.trial_days ?? 7} dias grátis sem cartão` };
   const headerTitle = isSuspenso
     ? "Regularize seu pagamento"
-    : "Ative sua IA e comece a vender";
+    : paywallMode
+    ? "Ative seu plano para continuar"
+    : "Comece grátis em segundos";
   const headerSubtitle = isSuspenso
     ? "Seus dados ficam aqui esperando. Assim que o pagamento for confirmado, seu acesso é liberado automaticamente."
-    : "Um pagamento único de implementação e sua IA já começa a atender. Depois disso, só a mensalidade do plano escolhido.";
+    : paywallMode
+    ? "Seus dados ficam aqui esperando. Assim que o pagamento for confirmado, seu acesso é liberado automaticamente."
+    : "Escolha um plano para começar. Você não precisa pagar agora — só vai cobrar no final do período de teste, se quiser continuar.";
 
   return (
     <div className="min-h-screen bg-background">
@@ -212,9 +222,11 @@ function CheckoutPage() {
           <p className="text-muted-foreground mt-3 text-base md:text-lg">
             {headerSubtitle}
           </p>
-          <p className="text-xs text-amber-700 dark:text-amber-400 mt-3 font-medium">
-            Importante: use o mesmo e-mail do cadastro (<span className="font-mono">{ctx.user.email}</span>) na hora de pagar — é assim que a gente libera seu acesso.
-          </p>
+          {paywallMode && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-3 font-medium">
+              Importante: use o mesmo e-mail do cadastro (<span className="font-mono">{ctx.user.email}</span>) na hora de pagar — é assim que a gente libera seu acesso.
+            </p>
+          )}
         </div>
 
         {plans.length === 0 ? (
@@ -252,6 +264,11 @@ function CheckoutPage() {
                         <span className="text-muted-foreground text-sm">/mês</span>
                       </div>
                       <p className="text-sm text-muted-foreground mt-2 min-h-[2.5rem]">{p.descricao}</p>
+                      {!paywallMode && (
+                        <p className="text-[11px] text-primary font-semibold mt-1">
+                          {p.trial_days} dias grátis — sem cartão
+                        </p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2 mb-5">
                       <Limit label="WhatsApp" v={1} />
@@ -296,7 +313,7 @@ function CheckoutPage() {
                     </p>
                     {plano?.checkout_url && (
                       <a
-                        href={buildCheckoutUrl(plano.checkout_url, ctx.user.email, companyId)}
+                        href={buildCheckoutUrl(plano.checkout_url, ctx.user.email, ctx.company?.id ?? null)}
                         target="_blank" rel="noreferrer"
                         className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                       >
@@ -304,67 +321,47 @@ function CheckoutPage() {
                       </a>
                     )}
                   </div>
-                ) : isSuspenso ? (
+                ) : paywallMode ? (
                   <>
                     <div className="flex items-center justify-center gap-2 mb-3">
                       <Lock className="size-5 text-primary" />
-                      <h2 className="font-display text-xl font-bold">Regularize para voltar a usar</h2>
+                      <h2 className="font-display text-xl font-bold">
+                        {isSuspenso ? "Regularize para voltar a usar" : "Assine para liberar seu acesso"}
+                      </h2>
                     </div>
                     <p className="text-sm text-muted-foreground mb-5">
                       Plano selecionado: <span className="font-semibold text-foreground">{plano?.nome}</span> —{" "}
                       {formatBRL(plano?.preco_cents ?? 0)}/mês. Pagamento por cartão, Pix ou boleto via Kiwify.
                     </p>
                     <Button
-                      onClick={ativarPlano}
-                      disabled={!plano || !plano?.checkout_url || creating}
+                      onClick={pagarAgora}
+                      disabled={!plano || !plano?.checkout_url}
                       size="lg"
                       className="w-full md:w-auto min-w-[280px] bg-gradient-brand text-primary-foreground hover:opacity-90 font-semibold"
                     >
-                      {creating ? <Loader2 className="size-4 mr-2 animate-spin" /> : <ExternalLink className="size-4 mr-2" />}
-                      {plano?.checkout_url ? `Regularizar ${plano?.nome} agora` : "Plano sem checkout configurado"}
+                      <ExternalLink className="size-4 mr-2" />
+                      {plano?.checkout_url ? `Assinar ${plano?.nome} agora` : "Plano sem checkout configurado"}
                     </Button>
                   </>
                 ) : (
                   <>
-                    <div className="flex items-center justify-center gap-2 mb-2">
+                    <div className="flex items-center justify-center gap-2 mb-3">
                       <Sparkles className="size-5 text-primary" />
-                      <h2 className="font-display text-xl font-bold">Implementação Completa da sua IA</h2>
+                      <h2 className="font-display text-xl font-bold">Pronto pra começar?</h2>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-5">Nossa equipe monta tudo pra você, do zero, pronto pra vender:</p>
-                    <ul className="text-left text-sm space-y-2 mb-6 max-w-md mx-auto">
-                      {[
-                        "IA treinada com o catálogo e o tom da sua empresa",
-                        "Funil de vendas (CRM Kanban) configurado do seu jeito",
-                        "WhatsApp conectado com segurança, em minutos",
-                        "Importação dos seus contatos e histórico existente",
-                        "1 sessão de ajuste fino com nosso time na primeira semana",
-                      ].map((item) => (
-                        <li key={item} className="flex items-start gap-2.5">
-                          <Check className="size-4 text-primary mt-0.5 shrink-0" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-muted-foreground mb-6 italic">
-                      Isso normalmente levaria uma agência ou freelancer semanas de trabalho e custaria bem mais caro. Nossa equipe entrega pronto em até 48h.
+                    <p className="text-sm text-muted-foreground mb-5">
+                      Plano escolhido: <span className="font-semibold text-foreground">{plano?.nome}</span>.
+                      Você ganha <b>{plano?.trial_days ?? 7} dias grátis</b> pra explorar tudo, sem precisar de cartão.
+                      Cobramos só se você decidir continuar.
                     </p>
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-6 space-y-1">
-                      <div className="flex items-baseline justify-center gap-2">
-                        <span className="text-xs uppercase tracking-wider text-muted-foreground">Implementação única</span>
-                        <span className="font-display text-2xl font-bold">{formatBRL(ATIVACAO_CENTS)}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        depois, mensalidade do plano <b className="text-foreground">{plano?.nome}</b>: {formatBRL(plano?.preco_cents ?? 0)}/mês
-                      </div>
-                    </div>
                     <Button
-                      onClick={ativarPlano}
-                      disabled={!plano || !plano?.checkout_url || creating}
+                      onClick={iniciarTrial}
+                      disabled={!plano || creating}
                       size="lg"
                       className="w-full md:w-auto min-w-[280px] bg-gradient-brand text-primary-foreground hover:opacity-90 font-semibold"
                     >
                       {creating ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Sparkles className="size-4 mr-2" />}
-                      Ativar minha IA agora — {formatBRL(ATIVACAO_CENTS)}
+                      Começar {plano?.trial_days ?? 7} dias grátis
                     </Button>
                   </>
                 )}

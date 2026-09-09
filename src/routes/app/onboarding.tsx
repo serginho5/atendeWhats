@@ -12,6 +12,7 @@ import { brand, supportWhatsappUrl } from "@/config/brand";
 import { Loader2, Check, Building2, MapPin, Palette, PartyPopper, CalendarClock, MessageCircle, CheckCircle2 } from "lucide-react";
 import { maskCpf, maskCnpj, maskPhone, maskCep } from "@/lib/masks";
 import { listAvailableSlots, createSpecialistBooking } from "@/lib/specialist-booking.functions";
+import { PLAN_LABEL, normalizePlanSlug } from "@/lib/plan-features";
 
 type Search = { checkout?: string };
 
@@ -158,7 +159,7 @@ function Onboarding() {
   // Toast pagamento aprovado
   useEffect(() => {
     if (search.checkout === "success") {
-      toast.success("Pagamento validado! Sua IA já está ativa.");
+      toast.success("Pagamento validado! Seu plano está ativo.");
     }
   }, [search.checkout]);
 
@@ -458,8 +459,13 @@ function Onboarding() {
             </div>
             <h2 className="text-xl font-bold font-display">Tudo certo, {nomeFantasia}!</h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Sua conta está pronta e sua IA já está ativa.
-              Conecte seu WhatsApp no próximo passo e ela já começa a atender.
+              Sua conta está pronta. Você tem <b>7 dias grátis</b> pra explorar tudo.
+              Conecte seu WhatsApp no próximo passo e a IA já começa a atender.
+            </p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto bg-muted/50 rounded-lg px-3 py-2">
+              Seu período de teste está liberado com as funcionalidades do{" "}
+              <b>Plano {PLAN_LABEL[normalizePlanSlug(ctx.company?.selected_plan_slug)]}</b> — o mesmo que
+              você terá ao assinar. Ao fim dos 7 dias, confirme esse plano (ou troque) pra continuar.
             </p>
           </div>
         )}

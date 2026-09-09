@@ -1,5 +1,8 @@
 // Multi-provider AI chat. Gemini default via Google AI Studio (chave própria do backend).
 // OpenAI e Anthropic usam a chave da própria empresa.
+import { fetchWithTimeout } from "./fetch-with-timeout";
+
+const AI_TIMEOUT_MS = 30000;
 
 export interface ChatMsg {
   role: "system" | "user" | "assistant";
@@ -49,7 +52,7 @@ export async function transcribeAudio(base64: string, mimetype: string): Promise
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY ausente. Gere uma chave grátis em aistudio.google.com/apikey.");
   const cleanMime = (mimetype || "audio/ogg").split(";")[0].trim();
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${key}`,
     {
       method: "POST",
@@ -66,6 +69,7 @@ export async function transcribeAudio(base64: string, mimetype: string): Promise
         ],
       }),
     },
+    AI_TIMEOUT_MS,
   );
   if (!res.ok) {
     const t = await res.text();
@@ -88,9 +92,10 @@ async function geminiChat(key: string, model: string, messages: ChatMsg[]): Prom
   const body: Record<string, unknown> = { contents };
   if (systemText) body.system_instruction = { parts: [{ text: systemText }] };
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    AI_TIMEOUT_MS,
   );
   if (!res.ok) {
     const t = await res.text();
@@ -106,11 +111,11 @@ async function geminiChat(key: string, model: string, messages: ChatMsg[]): Prom
 }
 
 async function openAiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages }),
-  });
+  }, AI_TIMEOUT_MS);
   if (!res.ok) {
     const t = await res.text();
     throw new Error(`OpenAI: ${res.status} ${t.slice(0, 200)}`);
@@ -124,7 +129,7 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
   const conv = messages
     .filter((m) => m.role !== "system")
     .map((m) => ({ role: m.role, content: m.content }));
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -132,7 +137,7 @@ async function anthropicChat(key: string, model: string, messages: ChatMsg[]): P
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ model, max_tokens: 1024, system, messages: conv }),
-  });
+  }, AI_TIMEOUT_MS);
   if (!res.ok) {
     const t = await res.text();
     throw new Error(`Anthropic: ${res.status} ${t.slice(0, 200)}`);
