@@ -4,6 +4,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const t0 = Date.now();
         try {
           const payload: any = await request.json().catch(() => ({}));
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -235,56 +236,65 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             await new Promise((r) => setTimeout(r, bufferSec * 1000));
           }
 
-          const { data: newer } = await supabaseAdmin
-            .from("mensagens")
-            .select("id, created_at")
-            .eq("company_id", companyId)
-            .eq("numero", number)
-            .eq("direcao", "entrada")
-            .gt("created_at", myCreatedAt)
-            .limit(1);
+          // As 5 leituras abaixo são independentes — em paralelo economiza ~4 idas ao banco.
+          const [
+            { data: newer },
+            { data: humanRecent },
+            { data: histDesc },
+            { data: cardRow },
+            { data: googleIntegration },
+          ] = await Promise.all([
+            supabaseAdmin
+              .from("mensagens")
+              .select("id, created_at")
+              .eq("company_id", companyId)
+              .eq("numero", number)
+              .eq("direcao", "entrada")
+              .gt("created_at", myCreatedAt)
+              .limit(1),
+            supabaseAdmin
+              .from("mensagens")
+              .select("id, created_at, autor")
+              .eq("company_id", companyId)
+              .eq("numero", number)
+              .eq("direcao", "saida")
+              .eq("autor", "humano")
+              .gte("created_at", new Date(Date.now() - 90_000).toISOString())
+              .limit(1),
+            supabaseAdmin
+              .from("mensagens")
+              .select("autor,direcao,texto,created_at")
+              .eq("company_id", companyId)
+              .eq("numero", number)
+              .order("created_at", { ascending: false })
+              .limit(25),
+            supabaseAdmin
+              .from("crm_cards")
+              .select("status, nome, stage_id")
+              .eq("company_id", companyId)
+              .eq("numero", number)
+              .maybeSingle(),
+            supabaseAdmin
+              .from("google_integration")
+              .select("conectado")
+              .eq("company_id", companyId)
+              .maybeSingle(),
+          ]);
           if (newer && newer.length > 0) {
             await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
             return new Response("superseded", { status: 200 });
           }
 
-          const { data: humanRecent } = await supabaseAdmin
-            .from("mensagens")
-            .select("id, created_at, autor")
-            .eq("company_id", companyId)
-            .eq("numero", number)
-            .eq("direcao", "saida")
-            .eq("autor", "humano")
-            .gte("created_at", new Date(Date.now() - 90_000).toISOString())
-            .limit(1);
           if (humanRecent && humanRecent.length > 0) {
             await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
             return new Response("human-active", { status: 200 });
           }
 
-          const { data: histDesc } = await supabaseAdmin
-            .from("mensagens")
-            .select("autor,direcao,texto,created_at")
-            .eq("company_id", companyId)
-            .eq("numero", number)
-            .order("created_at", { ascending: false })
-            .limit(25);
           const historico = (histDesc ?? []).slice().reverse();
 
-          const { data: cardRow } = await supabaseAdmin
-            .from("crm_cards")
-            .select("status, nome, stage_id")
-            .eq("company_id", companyId)
-            .eq("numero", number)
-            .maybeSingle();
           const estagioAtual = cardRow?.status || stages[0]?.nome || "Conversas";
           const resumoContato = `${cardRow?.nome || pushName || "Contato"} (${number}), ${historico.length} mensagens trocadas`;
 
-          const { data: googleIntegration } = await supabaseAdmin
-            .from("google_integration")
-            .select("conectado")
-            .eq("company_id", companyId)
-            .maybeSingle();
 
           const responderEmPartes = cfg?.responder_em_partes ?? true;
           const system = buildSystemPrompt(cfg ?? {}, {
@@ -320,13 +330,15 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.warn("[credits] créditos esgotados — IA não respondeu", companyId);
             return new Response("no_credits", { status: 200 });
           }
-          const throttleReason = await getAiThrottleReason(supabaseAdmin, companyId, number);
+          const [throttleReason, plan] = await Promise.all([
+            getAiThrottleReason(supabaseAdmin, companyId, number),
+            getCompanyPlan(companyId),
+          ]);
           if (throttleReason) {
             await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
             console.warn("[whatsapp.safety] resposta pausada", throttleReason, companyId, number);
             return new Response(throttleReason, { status: 200 });
           }
-          const plan = await getCompanyPlan(companyId);
           let providerChoice = ((cfg as any)?.ai_provider || "gemini") as string;
           let modelChoice = ((cfg as any)?.ai_model || "google/gemini-flash-lite-latest") as string;
           if (!allowsProvider(plan.slug, providerChoice)) {
@@ -334,6 +346,9 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             modelChoice = "google/gemini-flash-lite-latest";
           }
 
+          // Cliente já vê "digitando…" enquanto a IA pensa (sem esperar — ver nota no envio).
+          void evoSendPresence(instanceName, number, "composing", 4000);
+          const aiStartedAt = Date.now();
           let rawReply = "";
           try {
             rawReply = await lovableAiChat(messages, {
@@ -386,14 +401,22 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           if (confirmacaoAgenda) finalParts.push(confirmacaoAgenda);
+          const aiMs = Date.now() - aiStartedAt;
+          const tBeforeSend = Date.now();
 
           for (let i = 0; i < finalParts.length; i++) {
             const part = finalParts[i];
             if (!part) continue;
             try {
-              const typingMs = Math.min(3000, 1200 + Math.floor(part.length * 35));
-              await evoSendPresence(instanceName, number, "composing", typingMs);
-              await new Promise((r) => setTimeout(r, typingMs));
+              // A Evolution segura a requisição de presença pelo `delay` inteiro, então
+              // NÃO dá await nela (antes isso dobrava o tempo de "digitando" de cada parte).
+              // Na 1ª parte, desconta o tempo que o cliente já passou vendo "digitando…" durante a IA.
+              let typingMs = Math.min(2500, 800 + Math.floor(part.length * 25));
+              if (i === 0) typingMs = Math.max(0, typingMs - (Date.now() - aiStartedAt));
+              if (typingMs > 0) {
+                void evoSendPresence(instanceName, number, "composing", typingMs);
+                await new Promise((r) => setTimeout(r, typingMs));
+              }
               await evoSendText(instanceName, number, part);
               await supabaseAdmin.from("mensagens").insert({
                 company_id: companyId,
@@ -405,12 +428,14 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                 texto: part,
               });
               if (i < finalParts.length - 1) {
-                await new Promise((r) => setTimeout(r, 700 + Math.floor(Math.random() * 800)));
+                await new Promise((r) => setTimeout(r, 400 + Math.floor(Math.random() * 400)));
               }
             } catch (e: any) {
               console.error("[send]", e?.message);
             }
           }
+
+          console.log(`[whatsapp.timing] ${instanceName} total=${Date.now() - t0}ms buffer=${bufferSec}s ia=${aiMs}ms envio=${Date.now() - tBeforeSend}ms partes=${finalParts.length}`);
 
           await upsertCard(
             supabaseAdmin,
