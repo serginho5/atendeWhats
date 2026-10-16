@@ -47,7 +47,11 @@ async function evo<T = any>(
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = data?.message || data?.error || text || `HTTP ${res.status}`;
+    // Evolution v2 manda o motivo real em response.message (array), ex.:
+    // { status: 403, error: "Forbidden", response: { message: ['This name "x" is already in use.'] } }
+    const detail = data?.response?.message;
+    const detailText = Array.isArray(detail) ? detail.map((d: any) => (typeof d === "string" ? d : JSON.stringify(d))).join("; ") : detail;
+    const msg = detailText || data?.message || data?.error || text || `HTTP ${res.status}`;
     throw new Error(`Evolution API: ${msg}.${SUPPORT_SUFFIX}`);
   }
   return data as T;
