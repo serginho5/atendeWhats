@@ -49,8 +49,9 @@ async function evo<T = any>(
   if (!res.ok) {
     // Evolution v2 manda o motivo real em response.message (array), ex.:
     // { status: 403, error: "Forbidden", response: { message: ['This name "x" is already in use.'] } }
-    const detail = data?.response?.message;
-    const detailText = Array.isArray(detail) ? detail.map((d: any) => (typeof d === "string" ? d : JSON.stringify(d))).join("; ") : detail;
+    const detail = data?.response?.message ?? data?.response;
+    const asText = (d: any) => (typeof d === "string" ? d : JSON.stringify(d));
+    const detailText = detail == null ? null : Array.isArray(detail) ? detail.map(asText).join("; ") : asText(detail);
     const msg = detailText || data?.message || data?.error || text || `HTTP ${res.status}`;
     throw new Error(`Evolution API: ${msg}.${SUPPORT_SUFFIX}`);
   }
@@ -123,7 +124,13 @@ function extractQrCode(payload: any): string | null {
 }
 
 export async function evoGetQr(instanceName: string, number?: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
-  return evoParseQr(await evoConnect(instanceName, number));
+  const payload: any = await evoConnect(instanceName, number);
+  if (number && !payload?.pairingCode && !payload?.qrcode?.pairingCode) {
+    // Diagnóstico: o que a Evolution devolveu quando pedimos código e ele não veio (sem o base64).
+    const shape = JSON.stringify(payload, (k, v) => (k === "base64" || k === "code" ? (v ? `<${String(v).length} chars>` : v) : v));
+    console.warn(`[evolution.pairing] ${instanceName} sem pairingCode: ${shape?.slice(0, 400)}`);
+  }
+  return evoParseQr(payload);
 }
 
 // Extrai o QR de qualquer resposta da Evolution que traga um (connect ou create com qrcode: true).
