@@ -2,6 +2,11 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { startWhatsappMonitor } from "./lib/whatsapp-monitor.server";
+
+// Só em produção: em dev o Vite recarrega o módulo e o monitor mandaria
+// e-mail de verdade a partir da máquina local.
+if (process.env.NODE_ENV === "production") startWhatsappMonitor();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;

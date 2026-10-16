@@ -147,16 +147,43 @@ export function renderScheduleReminderEmail(opts: { nome: string | null; loginUr
   };
 }
 
+// Aviso pro cliente quando o monitor (src/lib/whatsapp-monitor.server.ts)
+// detecta que o WhatsApp dele caiu e o agente parou de responder.
+export function renderWhatsappDisconnectedEmail(opts: { nome: string | null; numero: string | null; conexaoUrl: string }): { subject: string; html: string } {
+  const primeiroNome = opts.nome?.trim().split(/\s+/)[0] || null;
+  const saudacao = primeiroNome ? `Oi, ${primeiroNome}!` : "Oi!";
+  const numeroTxt = opts.numero ? ` (<b>${opts.numero}</b>)` : "";
+  return {
+    subject: `⚠️ Seu WhatsApp desconectou — ${BRAND_NAME}`,
+    html: shell("WhatsApp desconectado", `
+      <h1 style="margin:0 0 12px;font-size:22px;color:#111827;">${saudacao} Seu WhatsApp desconectou ⚠️</h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">O número conectado ao ${BRAND_NAME}${numeroTxt} perdeu a conexão. Enquanto ele estiver desconectado, <b>sua IA não consegue responder seus clientes</b>.</p>
+      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#374151;">Pra voltar, leva menos de 2 minutos:</p>
+      <ol style="margin:0 0 24px;padding-left:20px;font-size:14.5px;line-height:1.7;color:#374151;">
+        <li>Clique no botão abaixo e gere um novo QR Code</li>
+        <li>No celular, abra o WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar aparelho</b></li>
+        <li>Escaneie o código</li>
+      </ol>
+      <p style="text-align:center;margin:0 0 20px;">${button("Reconectar meu WhatsApp", opts.conexaoUrl)}</p>
+      <p style="margin:0;font-size:12.5px;line-height:1.6;color:#6b7280;">Isso costuma acontecer quando o celular fica muitos dias sem internet ou quando o aparelho é removido em "Aparelhos conectados". Qualquer dúvida, chame o suporte.</p>
+    `),
+  };
+}
+
 // E-mail de alerta interno pro dono da plataforma — sem a casca de marca,
-// só um aviso direto quando um cliente novo compra ou agenda o onboarding.
+// só um aviso direto quando um cliente novo compra, agenda o onboarding
+// ou tem o WhatsApp desconectado.
 export function renderInternalAlertEmail(opts: {
-  tipo: "compra" | "agendamento";
+  tipo: "compra" | "agendamento" | "desconexao";
   empresa: string;
   contatoNome: string | null;
   contatoEmail: string;
   detalhe?: string;
 }): { subject: string; html: string } {
-  const titulo = opts.tipo === "compra" ? "🛒 Nova compra" : "📅 Novo agendamento de onboarding";
+  const titulo =
+    opts.tipo === "compra" ? "🛒 Nova compra"
+    : opts.tipo === "agendamento" ? "📅 Novo agendamento de onboarding"
+    : "⚠️ WhatsApp desconectado";
   return {
     subject: `${titulo} — ${opts.empresa}`,
     html: `<!doctype html><html lang="pt-BR"><body style="font-family:Arial,Helvetica,sans-serif;background:#f4f6f5;padding:24px;">
