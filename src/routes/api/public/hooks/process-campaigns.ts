@@ -34,7 +34,7 @@ export const Route = createFileRoute("/api/public/hooks/process-campaigns")({
               .select("instance_name, status")
               .eq("company_id", c.company_id)
               .maybeSingle();
-            if (!inst || inst.status !== "open") {
+            if (!inst || inst.status !== "connected") {
               processed.push({ id: c.id, skipped: "sem_whatsapp" });
               continue;
             }

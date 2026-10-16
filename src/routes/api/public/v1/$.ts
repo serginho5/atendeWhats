@@ -48,7 +48,7 @@ async function handle(request: Request) {
       if (!numero || !texto) return new Response(JSON.stringify({ error: "numero e texto obrigatórios" }), { status: 400 });
       const { data: inst } = await (supabaseAdmin as any).from("whatsapp_instances")
         .select("instance_name, status").eq("company_id", companyId).maybeSingle();
-      if (!inst || inst.status !== "open") return new Response(JSON.stringify({ error: "WhatsApp não conectado" }), { status: 400 });
+      if (!inst || inst.status !== "connected") return new Response(JSON.stringify({ error: "WhatsApp não conectado" }), { status: 400 });
       if (!userId) return new Response(JSON.stringify({ error: "Token sem owner; recrie o token." }), { status: 400 });
       try {
         const { evoSendText } = await import("@/lib/evolution.server");

@@ -29,7 +29,7 @@ export const sendCsat = createServerFn({ method: "POST" })
     if (error || !row) throw new Error(error?.message ?? "Falha ao registrar CSAT.");
 
     const { data: inst } = await supabase.from("whatsapp_instances").select("instance_name,status").eq("company_id", companyId).maybeSingle();
-    if (inst && inst.status === "open") {
+    if (inst && inst.status === "connected") {
       const link = `${appOrigin()}/csat/${row.token}`;
       const texto = `Olá! Como foi nosso atendimento? Avalie em 1 minuto: ${link}`;
       try {
