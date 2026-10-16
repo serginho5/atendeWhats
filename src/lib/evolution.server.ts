@@ -52,7 +52,8 @@ async function evo<T = any>(
     const detail = data?.response?.message ?? data?.response;
     const asText = (d: any) => (typeof d === "string" ? d : JSON.stringify(d));
     const detailText = detail == null ? null : Array.isArray(detail) ? detail.map(asText).join("; ") : asText(detail);
-    const msg = detailText || data?.message || data?.error || text || `HTTP ${res.status}`;
+    const fallback = data?.message ?? data?.error;
+    const msg = detailText || (fallback != null ? asText(fallback) : null) || text || `HTTP ${res.status}`;
     throw new Error(`Evolution API: ${msg}.${SUPPORT_SUFFIX}`);
   }
   return data as T;

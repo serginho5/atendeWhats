@@ -66,7 +66,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
       .select("instance_name,status,numero,webhook_token")
       .eq("company_id", companyId)
       .maybeSingle();
-    const instanceName = existing?.instance_name || deriveInstanceName(companyId);
+    let instanceName: string = existing?.instance_name || deriveInstanceName(companyId);
     const webhookToken = existing?.webhook_token || crypto.randomUUID();
     const webhookUrl = buildWebhookUrl(webhookToken);
     // Só pode derrubar/recriar a instância (fallback de QR abaixo) se tivermos
@@ -142,7 +142,22 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     }
     if (!gotIt() && confirmedNotOpen) {
       console.warn(`[evolution.connect] ${instanceName} ainda sem QR, recriando instância`);
-      try { await evoDelete(instanceName); } catch (e) { console.warn("[evolution.delete]", e); }
+      let deleted = false;
+      try { await evoDelete(instanceName); deleted = true; } catch (e) { console.warn("[evolution.delete]", e); }
+      // A Evolution às vezes não deixa apagar uma instância presa em "connecting".
+      // Nesse caso cria uma nova com outro nome e aponta a empresa pra ela
+      // (o webhook_token continua o mesmo, então o webhook segue valendo).
+      if (!deleted) {
+        const oldName = instanceName;
+        const newName = `${deriveInstanceName(companyId)}_${Date.now().toString(36).slice(-5)}`;
+        const { error: renameErr } = await supabase
+          .from("whatsapp_instances")
+          .update({ instance_name: newName, status: "connecting" } as any)
+          .eq("company_id", companyId);
+        if (renameErr) throw renameErr;
+        instanceName = newName;
+        console.warn(`[evolution.recreate] ${oldName} não pôde ser apagada, usando ${newName}`);
+      }
       await new Promise((r) => setTimeout(r, 1500));
       try {
         const created = await evoCreateInstance(instanceName, webhookUrl, pairingNumber ?? undefined);
