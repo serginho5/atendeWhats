@@ -39,8 +39,11 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     const {
       evoCreateInstance,
       evoGetQr,
+      evoParseQr,
       evoSetWebhook,
       evoState,
+      evoLogout,
+      evoDelete,
     } = await import("./evolution.server");
 
     const { data: existing } = await (supabase as any)
@@ -51,10 +54,14 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     const instanceName = existing?.instance_name || deriveInstanceName(companyId);
     const webhookToken = existing?.webhook_token || crypto.randomUUID();
     const webhookUrl = buildWebhookUrl(webhookToken);
+    // Só pode derrubar/recriar a instância (fallback de QR abaixo) se tivermos
+    // confirmado com a Evolution que a sessão NÃO está aberta.
+    let confirmedNotOpen = !existing?.instance_name;
     if (existing?.instance_name) {
       try {
         const s = await evoState(existing.instance_name);
         const existingState = s?.instance?.state || (s as any)?.state;
+        if (existingState && existingState !== "open") confirmedNotOpen = true;
         if (existingState === "open") {
           if (webhookUrl) {
             try { await evoSetWebhook(existing.instance_name, webhookUrl); } catch (e) { console.warn("[evolution.setWebhook]", e); }
@@ -93,14 +100,41 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     let qrBase64: string | null = null;
     let code: string | null = null;
     let lastQrError: unknown = null;
-    for (let i = 0; i < 6; i++) {
+    async function pollQr(tries: number) {
+      for (let i = 0; i < tries; i++) {
+        try {
+          const qr = await evoGetQr(instanceName);
+          qrBase64 = qr.qrBase64;
+          code = qr.code;
+          if (qrBase64 || code) return;
+        } catch (e) { lastQrError = e; console.warn("[evolution.connect]", e); }
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    }
+    await pollQr(6);
+
+    // Instância que levou LOGOUT do WhatsApp pode ficar presa em "connecting"
+    // sem nunca gerar QR novo. Aqui a sessão já não está "open" (checado acima),
+    // então é seguro derrubar: primeiro logout, e se ainda não vier QR, recria.
+    if (!qrBase64 && !code && confirmedNotOpen) {
+      console.warn(`[evolution.connect] ${instanceName} sem QR, tentando logout`);
+      try { await evoLogout(instanceName); } catch {}
+      await pollQr(4);
+    }
+    if (!qrBase64 && !code && confirmedNotOpen) {
+      console.warn(`[evolution.connect] ${instanceName} ainda sem QR, recriando instância`);
+      try { await evoDelete(instanceName); } catch (e) { console.warn("[evolution.delete]", e); }
+      await new Promise((r) => setTimeout(r, 1500));
       try {
-        const qr = await evoGetQr(instanceName);
+        const created = await evoCreateInstance(instanceName, webhookUrl);
+        const qr = await evoParseQr(created);
         qrBase64 = qr.qrBase64;
         code = qr.code;
-        if (qrBase64 || code) break;
-      } catch (e) { lastQrError = e; console.warn("[evolution.connect]", e); }
-      await new Promise((r) => setTimeout(r, 800));
+      } catch (e) { lastQrError = e; console.warn("[evolution.recreate]", e); }
+      if (webhookUrl) {
+        try { await evoSetWebhook(instanceName, webhookUrl); } catch (e) { console.warn("[evolution.setWebhook]", e); }
+      }
+      if (!qrBase64 && !code) await pollQr(6);
     }
 
     if (!qrBase64 && !code && lastQrError) {

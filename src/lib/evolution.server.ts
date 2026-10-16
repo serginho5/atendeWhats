@@ -119,7 +119,11 @@ function extractQrCode(payload: any): string | null {
 }
 
 export async function evoGetQr(instanceName: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
-  const payload: any = await evoConnect(instanceName);
+  return evoParseQr(await evoConnect(instanceName));
+}
+
+// Extrai o QR de qualquer resposta da Evolution que traga um (connect ou create com qrcode: true).
+export async function evoParseQr(payload: any): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
   const image =
     asImageDataUrl(payload?.base64, true) ||
     asImageDataUrl(payload?.qrcode?.base64, true) ||
