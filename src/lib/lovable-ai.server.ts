@@ -83,8 +83,34 @@ export async function transcribeAudio(base64: string, mimetype: string): Promise
   return text;
 }
 
+// O Gemini às vezes responde 503 ("high demand") ou fica muito lento. Em vez de
+// deixar o cliente sem resposta, tenta o próximo modelo da lista. Cada tentativa
+// tem um teto curto, pra soma não passar muito do AI_TIMEOUT_MS.
+const GEMINI_FALLBACKS = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+const GEMINI_ATTEMPT_TIMEOUT_MS = 12000;
+
 async function geminiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
-  const modelId = model.replace(/^google\//, "");
+  const first = model.replace(/^google\//, "");
+  const chain = [first, ...GEMINI_FALLBACKS.filter((m) => m !== first)];
+  const startedAt = Date.now();
+  let lastErr: unknown = null;
+  for (const modelId of chain) {
+    const remaining = AI_TIMEOUT_MS - (Date.now() - startedAt);
+    if (remaining < 2000) break;
+    try {
+      return await geminiChatOnce(key, modelId, messages, Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remaining));
+    } catch (e: any) {
+      lastErr = e;
+      const msg = String(e?.message || "");
+      // Só troca de modelo em erro de capacidade/tempo; erro de requisição não melhora trocando.
+      if (!/ 50[0-9]|429|Limite|timeout|abort|indispon|Tempo esgotado/i.test(msg)) throw e;
+      console.warn(`[ai] ${modelId} falhou (${msg.slice(0, 80)}), tentando o próximo`);
+    }
+  }
+  throw lastErr ?? new Error("Gemini indisponível");
+}
+
+async function geminiChatOnce(key: string, modelId: string, messages: ChatMsg[], timeoutMs: number): Promise<string> {
   const systemText = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
   const contents = messages
     .filter((m) => m.role !== "system")
@@ -93,9 +119,10 @@ async function geminiChat(key: string, model: string, messages: ChatMsg[]): Prom
   if (systemText) body.system_instruction = { parts: [{ text: systemText }] };
 
   const res = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
-    AI_TIMEOUT_MS,
+    // Chave no header (não na URL), pra não vazar em mensagem de erro/log.
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`,
+    { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body) },
+    timeoutMs,
   );
   if (!res.ok) {
     const t = await res.text();
