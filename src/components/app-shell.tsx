@@ -92,7 +92,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground" style={{ ["--brand" as any]: primary }}>
-      {company && <TrialBanner company={company} />}
+      {company && !isSuperAdmin && <TrialBanner company={company} />}
       {company && (
         <div className="hidden md:flex items-center justify-end gap-2 px-4 py-1.5 bg-[color:var(--panel)]/60 border-b border-[color:var(--hairline)]">
           <CreditsBadge />

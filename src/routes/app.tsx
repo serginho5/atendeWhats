@@ -64,15 +64,17 @@ export const Route = createFileRoute("/app")({
 
     const company = (cu.company as any) as CompanyRow;
 
-    // Trial expirado ou status que exige pagamento → trava no checkout
+    // Trial expirado ou status que exige pagamento → trava no checkout.
+    // Super admin (dono da plataforma) nunca fica preso no paywall da própria empresa.
     const trialExpired =
       company.status_cobranca === "trial" &&
       new Date(company.trial_ate).getTime() <= Date.now();
-    const needsPayment =
+    const needsPayment = !isSuperAdmin && (
       company.status_cobranca === "checkout_pending" ||
       company.status_cobranca === "suspenso" ||
       company.status_cobranca === "pendente" ||
-      trialExpired;
+      trialExpired
+    );
 
     if (needsPayment && location.pathname !== "/app/checkout") {
       throw redirect({ to: "/app/checkout" });
