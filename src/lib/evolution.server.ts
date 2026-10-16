@@ -194,7 +194,15 @@ export async function evoLogout(instanceName: string) {
 }
 
 export async function evoDelete(instanceName: string) {
-  return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+  try {
+    return await evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+  } catch {
+    // Instância presa em "connecting" recusa o delete (400 "[object Object]").
+    // Reiniciar ela primeiro destrava — testado na Evolution v2.3.7.
+    try { await evo(`/instance/restart/${encodeURIComponent(instanceName)}`, { method: "POST" }); } catch {}
+    await new Promise((r) => setTimeout(r, 3000));
+    return evo(`/instance/delete/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+  }
 }
 
 // Marca a mensagem do cliente como lida — é o que faz os dois tiquinhos dele
