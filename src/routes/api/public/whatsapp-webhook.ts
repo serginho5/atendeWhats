@@ -186,6 +186,15 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             return new Response("paused-contact", { status: 200 });
           }
 
+          // Cobrança: teste vencido, suspensa ou pagamento pendente → a mensagem fica
+          // registrada (o cliente vê quando regularizar), mas a IA não responde.
+          // Mesma regra do paywall em src/routes/app.tsx; a empresa do super admin
+          // (dono da plataforma) nunca é bloqueada.
+          if (await billingBlocksAi(supabaseAdmin, companyId)) {
+            await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+            return new Response("billing-blocked", { status: 200 });
+          }
+
           // Horário de atendimento: se ativo e fora do horário, manda mensagem padrão e não chama IA.
           try {
             const { isWithinBusinessHours } = await import("@/lib/business-hours");
@@ -473,6 +482,39 @@ function sanitizeAiParts(parts: string[]) {
     .filter(Boolean)
     .map((part) => (part.length > 700 ? `${part.slice(0, 697).trim()}...` : part))
     .slice(0, 2);
+}
+
+async function billingBlocksAi(admin: any, companyId: string): Promise<boolean> {
+  const { data: company, error } = await admin
+    .from("company")
+    .select("status_cobranca, trial_ate")
+    .eq("id", companyId)
+    .maybeSingle();
+  // Em erro de leitura não bloqueia: melhor responder do que deixar cliente pagante sem IA.
+  if (error || !company) return false;
+  const trialExpired =
+    company.status_cobranca === "trial" && new Date(company.trial_ate).getTime() <= Date.now();
+  const needsPayment =
+    trialExpired || ["checkout_pending", "suspenso", "pendente"].includes(company.status_cobranca);
+  if (!needsPayment) return false;
+
+  const { data: members } = await admin
+    .from("company_user")
+    .select("user_id")
+    .eq("company_id", companyId)
+    .eq("ativo", true);
+  const ids = (members ?? []).map((m: any) => m.user_id);
+  if (ids.length) {
+    const { data: supers } = await admin
+      .from("user_roles")
+      .select("user_id")
+      .in("user_id", ids)
+      .eq("role", "super_admin")
+      .limit(1);
+    if (supers?.length) return false;
+  }
+  console.warn("[billing] IA bloqueada — cobrança pendente", companyId, company.status_cobranca);
+  return true;
 }
 
 async function getAiThrottleReason(admin: any, companyId: string, numero: string): Promise<string | null> {
