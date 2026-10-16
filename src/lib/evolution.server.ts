@@ -57,13 +57,15 @@ async function evo<T = any>(
   return data as T;
 }
 
-export async function evoCreateInstance(instanceName: string, webhookUrl?: string) {
+export async function evoCreateInstance(instanceName: string, webhookUrl?: string, number?: string) {
   // Evolution v2: POST /instance/create
   const body: any = {
     instanceName,
     integration: "WHATSAPP-BAILEYS",
     qrcode: true,
   };
+  // Com number, a Evolution também devolve o pairingCode (conexão por código de 8 dígitos).
+  if (number) body.number = number;
   if (webhookUrl) {
     body.webhook = {
       url: webhookUrl,
@@ -75,9 +77,11 @@ export async function evoCreateInstance(instanceName: string, webhookUrl?: strin
   return evo(`/instance/create`, { method: "POST", json: body });
 }
 
-export async function evoConnect(instanceName: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
-  // GET /instance/connect/{instance} → { base64, code, pairingCode }
-  return evo(`/instance/connect/${encodeURIComponent(instanceName)}`, { method: "GET" });
+export async function evoConnect(instanceName: string, number?: string): Promise<{ base64?: string; code?: string; pairingCode?: string }> {
+  // GET /instance/connect/{instance}[?number=55...] → { base64, code, pairingCode }
+  // pairingCode só vem quando o número é informado.
+  const qs = number ? `?number=${encodeURIComponent(number)}` : "";
+  return evo(`/instance/connect/${encodeURIComponent(instanceName)}${qs}`, { method: "GET" });
 }
 
 function asImageDataUrl(value: unknown, allowRawBase64 = false): string | null {
@@ -118,8 +122,8 @@ function extractQrCode(payload: any): string | null {
   return null;
 }
 
-export async function evoGetQr(instanceName: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
-  return evoParseQr(await evoConnect(instanceName));
+export async function evoGetQr(instanceName: string, number?: string): Promise<{ qrBase64: string | null; code: string | null; pairingCode: string | null }> {
+  return evoParseQr(await evoConnect(instanceName, number));
 }
 
 // Extrai o QR de qualquer resposta da Evolution que traga um (connect ou create com qrcode: true).

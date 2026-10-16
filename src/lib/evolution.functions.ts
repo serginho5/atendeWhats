@@ -31,11 +31,26 @@ async function resolveCompanyId(supabase: any, userId: string): Promise<string> 
   return data.company_id as string;
 }
 
+// Normaliza o número pra conexão por código: só dígitos, com DDI 55 se vier só DDD+número.
+function normalizePairingNumber(raw?: string | null): string | null {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return null;
+  const full = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+  if (full.length < 12 || full.length > 13) {
+    throw new Error("Número inválido. Use DDD + número, ex.: (11) 91234-5678.");
+  }
+  return full;
+}
+
+// Sem `numero`: conecta por QR Code. Com `numero`: pede à Evolution o código de
+// 8 dígitos (WhatsApp → Aparelhos conectados → Conectar com número de telefone).
 export const connectWhatsapp = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d?: { numero?: string | null }) => d ?? {})
+  .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
     const companyId = await resolveCompanyId(supabase, userId);
+    const pairingNumber = normalizePairingNumber(data?.numero);
     const {
       evoCreateInstance,
       evoGetQr,
@@ -72,7 +87,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
               .update({ status: "connected", webhook_token: webhookToken, webhook_configured_at: new Date().toISOString() } as any)
               .eq("company_id", companyId);
           }
-          return { instanceName: existing.instance_name, qrBase64: null, code: null, state: "open", webhookUrl };
+          return { instanceName: existing.instance_name, qrBase64: null, code: null, pairingCode: null, state: "open", webhookUrl };
         }
       } catch {}
     }
@@ -86,7 +101,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     if (upsertErr) throw upsertErr;
 
     try {
-      await evoCreateInstance(instanceName, webhookUrl);
+      await evoCreateInstance(instanceName, webhookUrl, pairingNumber ?? undefined);
     } catch (e: any) {
       const msg = String(e?.message || "");
       if (!/exists|already/i.test(msg)) console.warn("[evolution.create]", msg);
@@ -99,14 +114,18 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
 
     let qrBase64: string | null = null;
     let code: string | null = null;
+    let pairingCode: string | null = null;
     let lastQrError: unknown = null;
+    // No modo código, só serve o pairingCode; no modo QR, QR ou código bruto.
+    const gotIt = () => (pairingNumber ? !!pairingCode : !!(qrBase64 || code));
     async function pollQr(tries: number) {
       for (let i = 0; i < tries; i++) {
         try {
-          const qr = await evoGetQr(instanceName);
+          const qr = await evoGetQr(instanceName, pairingNumber ?? undefined);
           qrBase64 = qr.qrBase64;
           code = qr.code;
-          if (qrBase64 || code) return;
+          pairingCode = qr.pairingCode;
+          if (gotIt()) return;
         } catch (e) { lastQrError = e; console.warn("[evolution.connect]", e); }
         await new Promise((r) => setTimeout(r, 800));
       }
@@ -116,29 +135,33 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
     // Instância que levou LOGOUT do WhatsApp pode ficar presa em "connecting"
     // sem nunca gerar QR novo. Aqui a sessão já não está "open" (checado acima),
     // então é seguro derrubar: primeiro logout, e se ainda não vier QR, recria.
-    if (!qrBase64 && !code && confirmedNotOpen) {
+    if (!gotIt() && confirmedNotOpen) {
       console.warn(`[evolution.connect] ${instanceName} sem QR, tentando logout`);
       try { await evoLogout(instanceName); } catch {}
       await pollQr(4);
     }
-    if (!qrBase64 && !code && confirmedNotOpen) {
+    if (!gotIt() && confirmedNotOpen) {
       console.warn(`[evolution.connect] ${instanceName} ainda sem QR, recriando instância`);
       try { await evoDelete(instanceName); } catch (e) { console.warn("[evolution.delete]", e); }
       await new Promise((r) => setTimeout(r, 1500));
       try {
-        const created = await evoCreateInstance(instanceName, webhookUrl);
+        const created = await evoCreateInstance(instanceName, webhookUrl, pairingNumber ?? undefined);
         const qr = await evoParseQr(created);
         qrBase64 = qr.qrBase64;
         code = qr.code;
+        pairingCode = qr.pairingCode;
       } catch (e) { lastQrError = e; console.warn("[evolution.recreate]", e); }
       if (webhookUrl) {
         try { await evoSetWebhook(instanceName, webhookUrl); } catch (e) { console.warn("[evolution.setWebhook]", e); }
       }
-      if (!qrBase64 && !code) await pollQr(6);
+      if (!gotIt()) await pollQr(6);
     }
 
-    if (!qrBase64 && !code && lastQrError) {
+    if (!gotIt() && lastQrError) {
       throw lastQrError;
+    }
+    if (pairingNumber && !pairingCode) {
+      throw new Error("O WhatsApp não gerou o código agora. Aguarde alguns minutos e tente de novo, ou use o QR Code.");
     }
 
     let state: string | undefined;
@@ -147,7 +170,7 @@ export const connectWhatsapp = createServerFn({ method: "POST" })
       state = s?.instance?.state || (s as any)?.state;
     } catch {}
 
-    return { instanceName, qrBase64, code, state, webhookUrl };
+    return { instanceName, qrBase64, code, pairingCode, state, webhookUrl };
   });
 
 export const checkWhatsappStatus = createServerFn({ method: "POST" })
