@@ -2,17 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function getOwnedCompanyId(supabase: any, userId: string): Promise<{ companyId: string; role: string }> {
-  const { data, error } = await supabase
-    .from("company_user")
-    .select("company_id, role")
-    .eq("user_id", userId)
-    .eq("ativo", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Sem empresa.");
-  return { companyId: data.company_id as string, role: data.role as string };
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa.");
+  return m;
 }
 
 function assertAdmin(role: string) {

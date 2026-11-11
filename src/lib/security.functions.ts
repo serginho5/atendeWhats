@@ -2,22 +2,19 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function resolveCompanyId(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase
-    .from("company_user").select("company_id, role")
-    .eq("user_id", userId).eq("ativo", true)
-    .order("created_at", { ascending: true }).limit(1).maybeSingle();
-  if (!data) throw new Error("Sem empresa.");
-  return data.company_id as string;
+  // Respeita o "Entrar como" do /master (ver src/lib/company-context.server.ts)
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa.");
+  return m.companyId;
 }
 
 async function requireOwnerOrAdmin(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase
-    .from("company_user").select("company_id, role")
-    .eq("user_id", userId).eq("ativo", true)
-    .order("created_at", { ascending: true }).limit(1).maybeSingle();
-  if (!data) throw new Error("Sem empresa.");
-  if (!["owner", "admin"].includes(String(data.role))) throw new Error("Apenas owner/admin.");
-  return data.company_id as string;
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa.");
+  if (!["owner", "admin"].includes(String(m.role))) throw new Error("Apenas owner/admin.");
+  return m.companyId;
 }
 
 // ---------- Audit log ----------

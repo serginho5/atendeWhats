@@ -5,14 +5,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export const getMyCredits = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: cu } = await context.supabase
-      .from("company_user")
-      .select("company_id")
-      .eq("user_id", context.userId)
-      .eq("ativo", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const { resolveMembership } = await import("./company-context.server");
+    const m = await resolveMembership(context.supabase, context.userId);
+    const cu = m ? { company_id: m.companyId } : null;
     if (!cu) return { saldo: 0, origem: "trial", resetam_em: null, ledger: [] as any[] };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [comp, led] = await Promise.all([

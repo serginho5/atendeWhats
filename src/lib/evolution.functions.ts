@@ -18,17 +18,11 @@ function buildWebhookUrl(token?: string | null) {
 }
 
 async function resolveCompanyId(supabase: any, userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("company_user")
-    .select("company_id")
-    .eq("user_id", userId)
-    .eq("ativo", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Você ainda não possui uma empresa. Finalize o onboarding.");
-  return data.company_id as string;
+  // Respeita o "Entrar como" do /master (ver src/lib/company-context.server.ts)
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa.");
+  return m.companyId;
 }
 
 // Normaliza o número pra conexão por código: só dígitos, com DDI 55 se vier só DDD+número.

@@ -9,16 +9,10 @@ export type MessageTemplate = {
 };
 
 async function currentCompanyId(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase
-    .from("company_user")
-    .select("company_id")
-    .eq("user_id", userId)
-    .eq("ativo", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!data?.company_id) throw new Error("Sem empresa ativa");
-  return data.company_id as string;
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa ativa");
+  return m.companyId;
 }
 
 export const listTemplates = createServerFn({ method: "GET" })

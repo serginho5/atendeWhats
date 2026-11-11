@@ -2,15 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function getCompanyAndPlan(supabase: any, userId: string) {
-  const { data: cu } = await supabase
-    .from("company_user")
-    .select("company_id, role, company:company(*)")
-    .eq("user_id", userId)
-    .eq("ativo", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!cu) throw new Error("Sem empresa vinculada");
+  const { resolveMembership } = await import("./company-context.server");
+  const m = await resolveMembership(supabase, userId);
+  if (!m) throw new Error("Sem empresa vinculada");
+  const { data: company } = await supabase.from("company").select("*").eq("id", m.companyId).maybeSingle();
+  const cu = { company_id: m.companyId, role: m.role, company };
   const { data: sub } = await supabase
     .from("subscription")
     .select("plan:plan(nome)")

@@ -18,9 +18,9 @@ export const startGoogleOAuth = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Google OAuth não configurado. Peça ao administrador para definir GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET." };
     }
     const { supabase, userId } = context;
-    const { data: cu } = await supabase
-      .from("company_user").select("company_id").eq("user_id", userId).eq("ativo", true)
-      .order("created_at", { ascending: true }).limit(1).maybeSingle();
+    const { resolveMembership } = await import("./company-context.server");
+    const _m = await resolveMembership(supabase, userId);
+    const cu = _m ? { company_id: _m.companyId, role: _m.role } : null;
     if (!cu) return { ok: false as const, error: "Sem empresa." };
 
     const { getCompanyPlan } = await import("@/lib/plan-limits.server");
@@ -51,9 +51,9 @@ export const disconnectGoogle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data: cu } = await supabase
-      .from("company_user").select("company_id,role").eq("user_id", userId).eq("ativo", true)
-      .order("created_at", { ascending: true }).limit(1).maybeSingle();
+    const { resolveMembership } = await import("./company-context.server");
+    const _m = await resolveMembership(supabase, userId);
+    const cu = _m ? { company_id: _m.companyId, role: _m.role } : null;
     if (!cu || !["owner", "admin"].includes(cu.role)) return { ok: false };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("google_integration").upsert(
@@ -68,9 +68,9 @@ export const createGoogleCalendarEvent = createServerFn({ method: "POST" })
   .inputValidator((d: { titulo: string; inicio: string; fim: string; cardId?: string | null; descricao?: string }) => d)
   .handler(async ({ context, data }) => {
     const { supabase, userId } = context;
-    const { data: cu } = await supabase
-      .from("company_user").select("company_id").eq("user_id", userId).eq("ativo", true)
-      .order("created_at", { ascending: true }).limit(1).maybeSingle();
+    const { resolveMembership } = await import("./company-context.server");
+    const _m = await resolveMembership(supabase, userId);
+    const cu = _m ? { company_id: _m.companyId, role: _m.role } : null;
     if (!cu) throw new Error("Sem empresa");
     const companyId = cu.company_id;
 
