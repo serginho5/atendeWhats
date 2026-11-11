@@ -174,7 +174,7 @@ export function renderWhatsappDisconnectedEmail(opts: { nome: string | null; num
 // só um aviso direto quando um cliente novo compra, agenda o onboarding
 // ou tem o WhatsApp desconectado.
 export function renderInternalAlertEmail(opts: {
-  tipo: "compra" | "agendamento" | "desconexao";
+  tipo: "compra" | "agendamento" | "desconexao" | "numero_trocado";
   empresa: string;
   contatoNome: string | null;
   contatoEmail: string;
@@ -183,6 +183,7 @@ export function renderInternalAlertEmail(opts: {
   const titulo =
     opts.tipo === "compra" ? "🛒 Nova compra"
     : opts.tipo === "agendamento" ? "📅 Novo agendamento de onboarding"
+    : opts.tipo === "numero_trocado" ? "🔁 Número do WhatsApp trocou"
     : "⚠️ WhatsApp desconectado";
   return {
     subject: `${titulo} — ${opts.empresa}`,

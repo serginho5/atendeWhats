@@ -9,6 +9,11 @@
 // grava "connected" de novo).
 //
 // Também avisa os super admins se a própria Evolution API parar de responder.
+//
+// Troca de número (11/11): em cada instância aberta, compara o número REAL da sessão
+// (ownerJid na Evolution) com o gravado no banco. Se mudou, atualiza o banco e avisa os
+// super admins; se o mesmo número estiver em duas instâncias, avisa também (foi o que
+// derrubou a Sofia: o chip da Katia entrou na instância da AW3S).
 
 const CHECK_EVERY_MS = 5 * 60_000;
 const FIRST_CHECK_DELAY_MS = 60_000;
@@ -18,6 +23,7 @@ const EVO_DOWN_RUNS_BEFORE_ALERT = 3;
 const fails = new Map<string, number>();
 let evoDownRuns = 0;
 let evoDownAlerted = false;
+const duplicadosAvisados = new Set<string>();
 let running = false;
 
 export function startWhatsappMonitor() {
@@ -57,6 +63,7 @@ async function checkAll() {
   if (!rows?.length) return;
 
   let reachable = 0;
+  const reais = new Map<string, string[]>(); // número real → instâncias
   for (const row of rows as any[]) {
     let state: string | null;
     try {
@@ -70,6 +77,8 @@ async function checkAll() {
 
     if (state === "open") {
       fails.delete(row.instance_name);
+      const real = await checkNumero(supabaseAdmin, row).catch(() => null);
+      if (real) reais.set(real, [...(reais.get(real) ?? []), row.instance_name]);
       continue;
     }
 
@@ -92,6 +101,24 @@ async function checkAll() {
     await notifyDisconnected(supabaseAdmin, row).catch((e: any) =>
       console.error("[whatsapp-monitor] falha ao avisar desconexão:", e?.message || e),
     );
+  }
+
+  for (const [numero, instancias] of reais) {
+    if (instancias.length < 2) continue;
+    const chave = `${numero}|${instancias.slice().sort().join(",")}`;
+    if (duplicadosAvisados.has(chave)) continue;
+    duplicadosAvisados.add(chave);
+    const { data: comps } = await (supabaseAdmin as any)
+      .from("whatsapp_instances").select("instance_name, company:company(nome)").in("instance_name", instancias);
+    const nomes = (comps ?? []).map((c: any) => c.company?.nome || c.instance_name).join(" e ");
+    console.warn(`[whatsapp-monitor] número ${numero} conectado em ${instancias.length} instâncias: ${instancias.join(", ")}`);
+    await notifyAdmins(supabaseAdmin, {
+      tipo: "numero_trocado",
+      empresa: nomes,
+      contatoNome: null,
+      contatoEmail: "—",
+      detalhe: `O mesmo WhatsApp (+${numero}) está conectado em ${instancias.length} empresas ao mesmo tempo: ${nomes}. Uma delas está recebendo as mensagens da outra, e o WhatsApp vai derrubar uma das sessões. Confira a Conexão de cada empresa e reconecte o número certo.`,
+    }).catch(() => {});
   }
 
   if (reachable === 0) {
@@ -137,11 +164,38 @@ async function notifyDisconnected(admin: any, row: { company_id: string; user_id
   });
 }
 
-async function notifyAdmins(admin: any, opts: { empresa: string; contatoNome: string | null; contatoEmail: string; detalhe: string }) {
+// Número real da sessão x número no banco. Devolve o número real (só dígitos) ou null.
+async function checkNumero(admin: any, row: { instance_name: string; company_id: string; numero: string | null }): Promise<string | null> {
+  const { evoFetchNumberFromInstance } = await import("@/lib/evolution.server");
+  const { mesmoTelefone } = await import("@/lib/handoff.server");
+  const real = await evoFetchNumberFromInstance(row.instance_name);
+  if (!real) return null;
+  if (!row.numero) {
+    // Primeira leitura (ex.: conectou por QR e o número ficou vazio): só grava, sem alarme.
+    await admin.from("whatsapp_instances").update({ numero: real }).eq("instance_name", row.instance_name);
+    return real;
+  }
+  if (mesmoTelefone(real, row.numero)) return real;
+
+  // Trocou: grava o novo (o aviso sai uma vez só) e avisa os super admins.
+  await admin.from("whatsapp_instances").update({ numero: real }).eq("instance_name", row.instance_name);
+  const { data: company } = await admin.from("company").select("nome").eq("id", row.company_id).maybeSingle();
+  console.warn(`[whatsapp-monitor] ${row.instance_name}: número trocou de ${row.numero} para ${real}`);
+  await notifyAdmins(admin, {
+    tipo: "numero_trocado",
+    empresa: company?.nome || row.company_id,
+    contatoNome: null,
+    contatoEmail: "—",
+    detalhe: `O WhatsApp conectado nesta empresa trocou de +${row.numero} para +${real}. Se não foi de propósito, outro celular leu o QR Code desta empresa: as mensagens dos clientes estão chegando no número errado. Confira em Conexão.`,
+  }).catch(() => {});
+  return real;
+}
+
+async function notifyAdmins(admin: any, opts: { tipo?: "desconexao" | "numero_trocado"; empresa: string; contatoNome: string | null; contatoEmail: string; detalhe: string }) {
   const { sendEmail } = await import("@/lib/email/send");
   const { renderInternalAlertEmail } = await import("@/lib/email/templates");
   const { data: cfg } = await admin.from("app_config").select("super_admin_emails").eq("id", true).maybeSingle();
-  const { subject, html } = renderInternalAlertEmail({ tipo: "desconexao", ...opts });
+  const { subject, html } = renderInternalAlertEmail({ ...opts, tipo: opts.tipo ?? "desconexao" });
   for (const to of (cfg?.super_admin_emails ?? []) as string[]) {
     await sendEmail(to, subject, html).catch(() => {});
   }
