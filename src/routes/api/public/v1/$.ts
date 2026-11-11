@@ -3,11 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 
 async function authToken(request: Request): Promise<{ companyId: string; userId: string | null } | null> {
   const h = request.headers.get("authorization") || "";
-  const m = h.match(/^Bearer\s+(azp_[a-z0-9]+)$/i);
+  // O banco gera o token sem prefixo (64 caracteres hex). Antes a API exigia "azp_" e comparava
+  // com o prefixo, então nenhum token era aceito. Agora vale "Bearer <token>" ou "Bearer azp_<token>".
+  const m = h.match(/^Bearer\s+(?:azp_)?([a-z0-9]{16,})$/i);
   if (!m) return null;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await (supabaseAdmin as any)
-    .from("api_token").select("id, company_id, criado_por, revogado").eq("token", m[1]).maybeSingle();
+    .from("api_token").select("id, company_id, criado_por, revogado").in("token", [m[1], `azp_${m[1]}`]).limit(1).maybeSingle();
   if (!data || data.revogado) return null;
   await (supabaseAdmin as any).from("api_token").update({ ultimo_uso_em: new Date().toISOString() }).eq("id", data.id);
   return { companyId: data.company_id as string, userId: data.criado_por as string | null };
