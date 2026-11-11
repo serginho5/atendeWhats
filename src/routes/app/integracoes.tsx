@@ -34,6 +34,7 @@ const EVENTS = [
   { id: "lead.created", label: "Lead criado" },
   { id: "lead.won", label: "Venda ganha" },
   { id: "lead.lost", label: "Lead perdido" },
+  { id: "lead.handoff", label: "Passou para humano" },
   { id: "csat.responded", label: "CSAT respondido" },
 ];
 

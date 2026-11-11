@@ -7,6 +7,7 @@ export type OutboundEvent =
   | "lead.created"
   | "lead.won"
   | "lead.lost"
+  | "lead.handoff"
   | "csat.responded";
 
 export async function emitWebhook(companyId: string, event: OutboundEvent, payload: any) {

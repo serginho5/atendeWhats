@@ -50,6 +50,7 @@ const DEFAULTS: any = {
   velocidade_resposta: "humana", evitar_palavras: "", idioma: "pt-BR",
   agendamento_ativo: false, servicos_agendaveis: "", duracao_padrao: "30 min",
   horarios_disponiveis: "", antecedencia_min: "2 horas",
+  handoff_aviso: false, handoff_quando: "",
 };
 
 
@@ -487,6 +488,10 @@ function AgentePage() {
                   <Field label="Palavra para pausar" value={cfg.palavra_pausar} onChange={(v) => up("palavra_pausar", v)} />
                   <Field label="Palavra para despausar" value={cfg.palavra_despausar} onChange={(v) => up("palavra_despausar", v)} />
                 </div>
+                <Toggle label="Avisar no WhatsApp do telefone de transferência e pausar a IA (o cliente continua neste número)" v={cfg.handoff_aviso} on={(v) => up("handoff_aviso", v)} />
+                {cfg.handoff_aviso && (
+                  <Area label="Quando passar para o humano (deixe vazio para o padrão: pediu pessoa, preço, pagamento, quer fechar ou reclamação)" value={cfg.handoff_quando} onChange={(v) => up("handoff_quando", v)} rows={2} />
+                )}
                 <SliderRow label="Esperar antes de responder (segundos)" v={cfg.segundos_buffer} max={20} on={(v) => up("segundos_buffer", v)} unit="s" />
                 <Toggle label="Responder em partes (1-3 bolhas)" v={cfg.responder_em_partes} on={(v) => up("responder_em_partes", v)} />
               </Section>

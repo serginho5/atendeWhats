@@ -130,6 +130,14 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             .eq("company_id", companyId)
             .maybeSingle();
 
+          // O responsável que recebe os avisos de handoff não é cliente: a IA nunca responde a ele.
+          if ((cfg as any)?.handoff_aviso) {
+            const { mesmoTelefone } = await import("@/lib/handoff.server");
+            if (mesmoTelefone(number, (cfg as any)?.telefone_transferencia)) {
+              return new Response("handoff-owner", { status: 200 });
+            }
+          }
+
           const palavraPausar = (cfg?.palavra_pausar || "/pausar").toLowerCase().trim();
           const palavraDespausar = (cfg?.palavra_despausar || "/despausar").toLowerCase().trim();
           const lower = text.toLowerCase().trim();
@@ -276,7 +284,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               .eq("company_id", companyId)
               .eq("numero", number)
               .order("created_at", { ascending: false })
-              .limit(50), // 25 mensagens (com respostas em partes) eram só ~8 trocas: a IA esquecia o começo
+              .limit(50), // 25 mensagens (com respostas em partes) eram só ~8 trocas: a IA "esquecia" o começo
             supabaseAdmin
               .from("crm_cards")
               .select("status, nome, stage_id")
@@ -370,7 +378,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.error("[ai]", e?.message);
           }
 
-          const { parts, stage, agendar, valor: valorGanho } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
+          const { parts, stage, agendar, valor: valorGanho, handoff } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
           // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...].
@@ -458,6 +466,37 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             valorGanho,
           );
 
+          // Handoff: pausa o contato e manda o resumo da conversa para o responsável (só se a empresa ligou a opção)
+          if (handoff && (cfg as any)?.handoff_aviso) {
+            try {
+              const { notificarHandoff } = await import("@/lib/handoff.server");
+              await notificarHandoff({
+                admin: supabaseAdmin,
+                instanceName,
+                companyId,
+                userId,
+                cfg,
+                numero: number,
+                nomeContato: cardRow?.nome || pushName || null,
+                motivo: handoff,
+                etapa: stage || estagioAtual,
+                historico: [
+                  ...historico.map((m: any) => ({ direcao: m.direcao, texto: m.texto })),
+                  ...(historico.at(-1)?.texto === text ? [] : [{ direcao: "entrada", texto: text }]),
+                  ...finalParts.map((p) => ({ direcao: "saida", texto: p })),
+                ],
+                ia: {
+                  provider: providerChoice,
+                  model: modelChoice,
+                  openaiKey: (cfg as any)?.openai_api_key || "",
+                  anthropicKey: (cfg as any)?.anthropic_api_key || "",
+                },
+              });
+            } catch (e: any) {
+              console.error("[handoff]", e?.message);
+            }
+          }
+
           return new Response("ok", { status: 200 });
         } catch (e: any) {
           console.error("[webhook]", e?.message, e?.stack);
@@ -537,7 +576,8 @@ async function getAiThrottleReason(admin: any, companyId: string, numero: string
       .gte("created_at", new Date(now - 60_000).toISOString()),
   ]);
 
-  // Antes era 6, mas cada resposta em partes grava 2-3 mensagens: 3 respostas em 10 min já travavam a IA (logs de 27/10 e 07/11).
+  // Antes era 6 mensagens, mas cada resposta em partes grava 2-3 mensagens: 3 respostas em 10 min
+  // já travavam a IA numa conversa normal (visto nos logs de 27/10 e 07/11). 18 ≈ 6 a 9 respostas.
   if ((contactRecent.count ?? 0) >= 18) return "contact-rate-limit";
   if ((companyRecent.count ?? 0) >= 20) return "company-rate-limit";
   return null;

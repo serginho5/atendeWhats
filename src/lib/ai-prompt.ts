@@ -27,6 +27,10 @@ export interface AgentConfig {
   pode_fazer: string;
   nao_pode_fazer: string;
   telefone_transferencia: string;
+  // Handoff com aviso: a IA marca [HANDOFF: motivo], o contato é pausado e o responsável
+  // recebe no WhatsApp (telefone_transferencia) o resumo da conversa. O cliente continua no mesmo número.
+  handoff_aviso?: boolean;
+  handoff_quando?: string;
   palavra_pausar: string;
   palavra_despausar: string;
 
@@ -248,7 +252,13 @@ export function buildSystemPrompt(
         `Antecedência mínima: ${c.antecedencia_min || "2 horas"}. ` +
         `Sempre confirme nome e o melhor horário antes de fechar o agendamento.`
       : "",
-    c.telefone_transferencia
+    c.handoff_aviso && c.telefone_transferencia
+      ? `PASSAR PARA UM HUMANO: ${c.handoff_quando?.trim() || "quando o cliente pedir para falar com uma pessoa, perguntar preço ou forma de pagamento, disser que quer fechar, ou reclamar de algo sensível"}. ` +
+        `Nesses casos, diga ao cliente, com naturalidade, que vai chamar o responsável para continuar a conversa AQUI MESMO, neste número, em instantes ` +
+        `(nunca passe outro telefone e nunca invente preço ou condição). Na MESMA resposta, em uma nova linha, escreva exatamente:\n` +
+        `[HANDOFF: motivo em poucas palavras]\n` +
+        `Esse marcador é interno e NÃO aparece para o cliente. Depois dele você não responde mais este contato.`
+      : c.telefone_transferencia
       ? `Se o cliente pedir atendimento humano, reclamar de algo sensível, ou precisar de algo fora do seu escopo, oriente a falar com ${c.telefone_transferencia} e diga que vai transferir.`
       : "Se o cliente pedir atendimento humano ou for algo sensível, diga educadamente que vai chamar alguém do time.",
     opts?.resumoContato ? `Contexto do contato: ${opts.resumoContato}` : "",
@@ -390,8 +400,14 @@ export interface AgendarBrief { inicio: string; fim: string; titulo: string; }
 export function parseAiOutput(
   raw: string,
   stages?: StageBrief[],
-): { parts: string[]; stage: string | null; agendar: AgendarBrief | null; valor: number | null } {
+): { parts: string[]; stage: string | null; agendar: AgendarBrief | null; valor: number | null; handoff: string | null } {
   let text = raw || "";
+  let handoff: string | null = null;
+  const hoMatch = text.match(/\[\s*HANDOFF\s*:?\s*([^\]]*)\]/i);
+  if (hoMatch) {
+    handoff = (hoMatch[1] || "").trim().slice(0, 200) || "pediu atendimento humano";
+    text = text.replace(hoMatch[0], "").trim();
+  }
   let stage: string | null = null;
   let stageTipo: StageBrief["tipo"] | null = null;
   let agendar: AgendarBrief | null = null;
@@ -442,7 +458,7 @@ export function parseAiOutput(
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
     .slice(0, 3);
-  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar, valor };
+  return { parts: parts.length ? parts : [text.trim()].filter(Boolean), stage, agendar, valor, handoff };
 }
 
 export function classifyStagePromptInstruction(): string {
