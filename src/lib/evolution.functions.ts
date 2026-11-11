@@ -300,9 +300,13 @@ export const sendWhatsappText = createServerFn({ method: "POST" })
       .eq("company_id", companyId)
       .eq("numero", data.numero)
       .eq("direcao", "saida")
+      .eq("autor", "humano")
       .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
-      .limit(6);
-    if ((recentOutbound?.length ?? 0) >= 6) {
+      .limit(20);
+    // Antes contava também as mensagens da IA e travava em 6: depois de um handoff (a IA já tinha
+    // mandado 5 em partes), o humano só conseguia mandar 1 mensagem (teste de 11/11).
+    // Agora conta só o que o humano mandou, com teto de 20 em 10 min (o contato escreveu nas últimas 24h).
+    if ((recentOutbound?.length ?? 0) >= 20) {
       throw new Error("Envio pausado por alguns minutos para proteger a qualidade do número.");
     }
     const { assertWithinLimit } = await import("./plan-limits.server");
