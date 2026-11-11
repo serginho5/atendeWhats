@@ -33,6 +33,7 @@ export const masterKpis = createServerFn({ method: "POST" })
       ativas: all.filter((c: any) => c.status_cobranca === "ativo").length,
       trial: all.filter((c: any) => c.status_cobranca === "trial").length,
       suspensas: all.filter((c: any) => c.status_cobranca === "suspenso").length,
+      vitalicias: all.filter((c: any) => c.status_cobranca === "vitalicio").length,
       novasMes: all.filter((c: any) => new Date(c.created_at).getTime() >= monthStart).length,
       mensagens: msgCount ?? 0,
       cards: cardsCount ?? 0,
@@ -98,7 +99,16 @@ export const listCompanies = createServerFn({ method: "POST" })
         if (!ultByCompany[(m as any).company_id]) ultByCompany[(m as any).company_id] = (m as any).created_at;
       }
     }
-    const list = (rows ?? []).map((c: any) => ({ ...c, ultima_atividade: ultByCompany[c.id] ?? null }));
+    const maeIds = Array.from(new Set((rows ?? []).map((c: any) => c.conta_mae_id).filter(Boolean)));
+    const maeNome: Record<string, string> = {};
+    if (maeIds.length) {
+      const { data: maes } = await supabaseAdmin.from("company").select("id, nome").in("id", maeIds);
+      for (const m of maes ?? []) maeNome[(m as any).id] = (m as any).nome;
+    }
+    const list = (rows ?? []).map((c: any) => ({
+      ...c, ultima_atividade: ultByCompany[c.id] ?? null,
+      conta_mae_nome: c.conta_mae_id ? maeNome[c.conta_mae_id] ?? null : null,
+    }));
     return { rows: list, total: count ?? 0, pageSize };
   });
 
@@ -108,9 +118,11 @@ export const suspendCompany = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     await assertSuper(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Subconta (tem conta-mãe) reativada volta a ser vitalícia, não "ativo"
+    const { data: c } = await (supabaseAdmin as any).from("company").select("conta_mae_id").eq("id", data.companyId).maybeSingle();
     const { error } = await supabaseAdmin
       .from("company")
-      .update({ status_cobranca: data.suspend ? "suspenso" : "ativo" })
+      .update({ status_cobranca: data.suspend ? "suspenso" : c?.conta_mae_id ? "vitalicio" : "ativo" })
       .eq("id", data.companyId);
     if (error) throw error;
     return { ok: true };
@@ -141,6 +153,7 @@ export const createCompanyWithOwner = createServerFn({ method: "POST" })
   .inputValidator((d: {
     nome: string; ownerEmail: string;
     planId?: string | null; trialDays?: number; password?: string | null;
+    contaMaeId?: string | null; // preenchido = subconta vitalícia dessa empresa
   }) => {
     const nome = String(d.nome || "").trim();
     const ownerEmail = String(d.ownerEmail || "").trim().toLowerCase();
@@ -153,6 +166,7 @@ export const createCompanyWithOwner = createServerFn({ method: "POST" })
       planId: d.planId || null,
       trialDays: Math.max(0, Math.min(90, Math.floor(d.trialDays ?? 3))),
       password,
+      contaMaeId: d.contaMaeId || null,
     };
   })
   .handler(async ({ context, data }) => {
@@ -189,7 +203,11 @@ export const createCompanyWithOwner = createServerFn({ method: "POST" })
       if (!ex) break;
       slug = `${baseSlug}-${i}`;
     }
-    const trialMs = data.trialDays * 86400000;
+    if (data.contaMaeId) {
+      const { data: mae } = await supabaseAdmin.from("company").select("id").eq("id", data.contaMaeId).maybeSingle();
+      if (!mae) throw new Error("Conta-mãe não encontrada");
+    }
+    const trialMs = data.contaMaeId ? 0 : data.trialDays * 86400000;
     const trialEnd = new Date(Date.now() + trialMs).toISOString();
     const { data: comp, error: cErr } = await supabaseAdmin
       .from("company")
@@ -197,9 +215,10 @@ export const createCompanyWithOwner = createServerFn({ method: "POST" })
         nome: data.nome,
         slug,
         created_by: ownerId,
-        status_cobranca: data.trialDays > 0 ? "trial" : "ativo",
+        status_cobranca: data.contaMaeId ? "vitalicio" : data.trialDays > 0 ? "trial" : "ativo",
         trial_ate: trialEnd,
-      })
+        conta_mae_id: data.contaMaeId,
+      } as any)
       .select("id")
       .single();
     if (cErr || !comp) throw new Error(cErr?.message || "Falha ao criar empresa");
@@ -208,8 +227,8 @@ export const createCompanyWithOwner = createServerFn({ method: "POST" })
       company_id: comp.id, user_id: ownerId, role: "owner", ativo: true, forcar_troca_senha: !data.password && !!tempPassword,
     });
 
-    // Cria subscription em trialing já com o plano selecionado
-    if (data.planId) {
+    // Cria subscription em trialing já com o plano selecionado (subconta vitalícia não tem assinatura)
+    if (data.planId && !data.contaMaeId) {
       await supabaseAdmin.from("subscription").insert({
         company_id: comp.id,
         plan_id: data.planId,
@@ -379,4 +398,37 @@ export const getCompanyDetails = createServerFn({ method: "POST" })
         cards: cardsCount ?? 0,
       },
     };
+  });
+
+// Subconta vitalícia: liga (com conta-mãe) ou desliga (volta para trial de 7 dias, sem conta-mãe).
+export const setSubcontaVitalicia = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { companyId: string; contaMaeId: string | null }) => d)
+  .handler(async ({ context, data }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.contaMaeId) {
+      if (data.contaMaeId === data.companyId) throw new Error("A empresa não pode ser conta-mãe dela mesma");
+      const { data: mae } = await (supabaseAdmin as any).from("company").select("id, conta_mae_id").eq("id", data.contaMaeId).maybeSingle();
+      if (!mae) throw new Error("Conta-mãe não encontrada");
+      if (mae.conta_mae_id) throw new Error("A conta-mãe escolhida já é uma subconta");
+    }
+    const update = data.contaMaeId
+      ? { status_cobranca: "vitalicio", conta_mae_id: data.contaMaeId }
+      : { status_cobranca: "trial", conta_mae_id: null, trial_ate: new Date(Date.now() + 7 * 86400000).toISOString() };
+    const { error } = await (supabaseAdmin as any).from("company").update(update).eq("id", data.companyId);
+    if (error) throw error;
+    return { ok: true };
+  });
+
+// Empresas que podem ser conta-mãe (não são subcontas), para os seletores do /master.
+export const listContasMae = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertSuper(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await (supabaseAdmin as any)
+      .from("company").select("id, nome").is("conta_mae_id", null).order("nome", { ascending: true }).limit(500);
+    if (error) throw error;
+    return { rows: (data ?? []) as Array<{ id: string; nome: string }> };
   });

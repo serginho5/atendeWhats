@@ -44,6 +44,7 @@ function Painel() {
         <MasterKpi icon={<Activity className="size-4" />} label="Ativas" value={s.ativas} trend={`${Math.round((s.ativas / Math.max(1, s.total)) * 100)}%`} />
         <MasterKpi icon={<Sparkles className="size-4" />} label="Em trial" value={s.trial} />
         <MasterKpi icon={<Pause className="size-4" />} label="Suspensas" value={s.suspensas} />
+        <MasterKpi icon={<Sparkles className="size-4" />} label="Subcontas vitalícias" value={(s as any).vitalicias ?? 0} />
       </div>
 
       <div className="grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-3">

@@ -31,6 +31,18 @@ function startOfMonthISO(): string {
 export async function getCompanyPlan(companyId: string): Promise<CompanyPlan> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+  // 0) Subconta vitalícia: plano mais alto, sem limite prático de contatos e mensagens
+  const { data: comp } = await (supabaseAdmin as any)
+    .from("company").select("status_cobranca").eq("id", companyId).maybeSingle();
+  if (comp?.status_cobranca === "vitalicio") {
+    return {
+      rawSlug: "vitalicio",
+      slug: "business",
+      nome: "Vitalício (subconta)",
+      limites: { instancias: 1, usuarios: 50, contatos: 1_000_000, mensagens: 1_000_000 },
+    };
+  }
+
   // 1) Assinatura ativa/trialing → plano vinculado
   const { data: sub } = await supabaseAdmin
     .from("subscription")

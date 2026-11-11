@@ -338,10 +338,16 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           // Se zerou, a IA não responde — exige assinatura/recarga.
           const { getCompanyPlan } = await import("@/lib/plan-limits.server");
           const { allowsProvider } = await import("@/lib/plan-features");
-          const { data: hasCredit } = await supabaseAdmin.rpc("consume_ai_credit", {
-            _company_id: companyId,
-            _ref: number,
-          });
+          // Subconta vitalícia (status_cobranca = 'vitalicio') não consome créditos.
+          const { data: compStatus } = await (supabaseAdmin as any)
+            .from("company").select("status_cobranca").eq("id", companyId).maybeSingle();
+          const vitalicia = compStatus?.status_cobranca === "vitalicio";
+          const { data: hasCredit } = vitalicia
+            ? { data: true }
+            : await supabaseAdmin.rpc("consume_ai_credit", {
+                _company_id: companyId,
+                _ref: number,
+              });
           if (!hasCredit) {
             await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
             console.warn("[credits] créditos esgotados — IA não respondeu", companyId);

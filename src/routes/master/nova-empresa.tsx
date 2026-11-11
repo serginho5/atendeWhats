@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Plus, Copy, Check } from "lucide-react";
 import { brand } from "@/config/brand";
-import { createCompanyWithOwner, listPlansBasic } from "@/lib/master.functions";
+import { createCompanyWithOwner, listPlansBasic, listContasMae } from "@/lib/master.functions";
 
 export const Route = createFileRoute("/master/nova-empresa")({
   head: () => ({ meta: [{ title: `${brand.name} — Nova empresa` }] }),
@@ -24,6 +24,10 @@ function fmt(cents: number, moeda = "BRL") {
 function NovaEmpresa() {
   const create = useServerFn(createCompanyWithOwner);
   const fetchPlans = useServerFn(listPlansBasic);
+  const fetchMaes = useServerFn(listContasMae);
+  const [maes, setMaes] = useState<Array<{ id: string; nome: string }>>([]);
+  const [subconta, setSubconta] = useState(false);
+  const [contaMaeId, setContaMaeId] = useState<string>("");
   const navigate = useNavigate();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [nome, setNome] = useState("");
@@ -43,6 +47,12 @@ function NovaEmpresa() {
         if (mid) setPlanId(mid.id);
         if (mid?.trial_days != null) setTrialDays(mid.trial_days);
       } catch (e: any) { toast.error(e?.message); }
+      try {
+        const m = await fetchMaes();
+        setMaes(m.rows);
+        const aw3s = m.rows.find((x) => /aw3s/i.test(x.nome)) ?? m.rows[0];
+        if (aw3s) setContaMaeId(aw3s.id);
+      } catch {}
     })();
   }, []);
 
@@ -51,9 +61,12 @@ function NovaEmpresa() {
     setBusy(true); setCreated(null);
     try {
       const r = await create({
-        data: { nome, ownerEmail, planId: planId || null, trialDays, password: password || null },
+        data: {
+          nome, ownerEmail, planId: subconta ? null : planId || null, trialDays, password: password || null,
+          contaMaeId: subconta ? contaMaeId || null : null,
+        },
       });
-      toast.success("Empresa criada e liberada com trial");
+      toast.success(subconta ? "Subconta vitalícia criada" : "Empresa criada e liberada com trial");
       setCreated({ email: ownerEmail, password: r.tempPassword ?? (password || null) });
       setNome(""); setOwnerEmail(""); setPassword("");
     } catch (e: any) { toast.error(e?.message || "Falha"); }
@@ -72,6 +85,29 @@ function NovaEmpresa() {
 
       <Card className="p-5">
         <form onSubmit={submit} className="space-y-5">
+          <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer hover:bg-muted/40">
+            <input type="checkbox" className="mt-1" checked={subconta} onChange={(e) => setSubconta(e.target.checked)} />
+            <div>
+              <div className="font-semibold text-sm">Subconta vitalícia</div>
+              <div className="text-xs text-muted-foreground">
+                Empresa interna ligada a uma conta-mãe (ex.: chip de prospecção da AW3S). Sem teste, sem cobrança,
+                a IA não consome créditos e os limites são do plano mais alto.
+              </div>
+            </div>
+          </label>
+          {subconta && (
+            <div>
+              <Label>Conta-mãe</Label>
+              <select
+                className="mt-1 w-full h-9 rounded-md border bg-background px-3 text-sm"
+                value={contaMaeId}
+                onChange={(e) => setContaMaeId(e.target.value)}
+              >
+                {maes.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
+            </div>
+          )}
+
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label>Nome da empresa</Label>
@@ -91,7 +127,7 @@ function NovaEmpresa() {
               />
               <p className="text-[11px] text-muted-foreground mt-1">Se preencher, esta será a senha de acesso.</p>
             </div>
-            <div>
+            {!subconta && <div>
               <Label>Dias de teste grátis</Label>
               <Input
                 type="number" min={0} max={90}
@@ -99,10 +135,10 @@ function NovaEmpresa() {
                 onChange={(e) => setTrialDays(Math.max(0, Math.min(90, Number(e.target.value) || 0)))}
               />
               <p className="text-[11px] text-muted-foreground mt-1">Após esse prazo o cliente precisa pagar pra continuar.</p>
-            </div>
+            </div>}
           </div>
 
-          <div>
+          {!subconta && <div>
             <Label>Plano</Label>
             <div className="grid sm:grid-cols-3 gap-2 mt-2">
               {plans.map((p) => {
@@ -127,10 +163,10 @@ function NovaEmpresa() {
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={busy || !planId}>
+            <Button type="submit" disabled={busy || (subconta ? !contaMaeId : !planId)}>
               {busy ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Plus className="size-4 mr-1.5" />}
               Criar e liberar acesso
             </Button>

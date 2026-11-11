@@ -6,7 +6,9 @@ export type CompanyRow = {
   primary_color: string;
   logo_url: string | null;
   telefone: string | null;
-  status_cobranca: "trial" | "ativo" | "suspenso" | "pendente" | "checkout_pending";
+  // "vitalicio" = subconta interna (ex.: chips de prospecção da AW3S): sem teste, sem cobrança, sem consumo de créditos
+  status_cobranca: "trial" | "ativo" | "suspenso" | "pendente" | "checkout_pending" | "vitalicio";
+  conta_mae_id?: string | null;
   trial_ate: string;
   onboarding_completed?: boolean | null;
   onboarding_step?: number | null;

@@ -417,7 +417,9 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Plano atual</h2>
-          {isActive ? (
+          {status === "vitalicio" ? (
+            <Badge className="bg-violet-600">Vitalícia</Badge>
+          ) : isActive ? (
             <Badge className="bg-emerald-600">Ativo</Badge>
           ) : isTrial ? (
             <Badge variant={isExpired ? "destructive" : "secondary"}>
@@ -436,6 +438,8 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
               {fmtBRL(sub.plan.preco_cents, sub.plan.moeda)}/{sub.plan.intervalo === "month" ? "mês" : "ano"}
             </div>
           </>
+        ) : status === "vitalicio" ? (
+          <div className="text-sm text-muted-foreground">Subconta vitalícia: sem mensalidade e sem consumo de créditos.</div>
         ) : (
           <div className="text-sm text-muted-foreground">Nenhum plano vinculado ainda.</div>
         )}

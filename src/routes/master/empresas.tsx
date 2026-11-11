@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles } from "lucide-react";
+import { LogIn, Pause, Play, CalendarClock, Loader2, KeyRound, Eye, Sparkles, Infinity as InfinityIcon } from "lucide-react";
 import { brand } from "@/config/brand";
-import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails } from "@/lib/master.functions";
+import { listCompanies, suspendCompany, extendTrial, resetCompanyOwnerPassword, getCompanyDetails, setSubcontaVitalicia, listContasMae } from "@/lib/master.functions";
 import { adminGrantCredits } from "@/lib/credits.functions";
 
 export const Route = createFileRoute("/master/empresas")({
@@ -25,6 +25,8 @@ function EmpresasPage() {
   const resetPwd = useServerFn(resetCompanyOwnerPassword);
   const details = useServerFn(getCompanyDetails);
   const grantCredits = useServerFn(adminGrantCredits);
+  const setVitalicia = useServerFn(setSubcontaVitalicia);
+  const fetchMaes = useServerFn(listContasMae);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
@@ -58,6 +60,29 @@ function EmpresasPage() {
     await suspend({ data: { companyId: c.id, suspend: next } });
     toast.success(next ? "Empresa suspensa" : "Empresa reativada");
     reload();
+  }
+
+  async function toggleVitalicia(c: any) {
+    try {
+      if (c.status_cobranca === "vitalicio") {
+        if (!confirm(`Tirar "${c.nome}" das subcontas vitalícias? Ela volta para um teste de 7 dias.`)) return;
+        await setVitalicia({ data: { companyId: c.id, contaMaeId: null } });
+        toast.success("Subconta desligada: voltou para trial de 7 dias");
+      } else {
+        const { rows: maes } = await fetchMaes();
+        const opcoes = maes.filter((m) => m.id !== c.id);
+        if (!opcoes.length) return toast.error("Nenhuma conta-mãe disponível");
+        const sugestao = opcoes.find((m) => /aw3s/i.test(m.nome)) ?? opcoes[0];
+        const lista = opcoes.map((m, i) => `${i + 1}. ${m.nome}`).join("\n");
+        const escolha = prompt(`Tornar "${c.nome}" subconta vitalícia de qual conta-mãe? (número)\n\n${lista}`,
+          String(opcoes.indexOf(sugestao) + 1));
+        const mae = opcoes[Number(escolha) - 1];
+        if (!mae) return;
+        await setVitalicia({ data: { companyId: c.id, contaMaeId: mae.id } });
+        toast.success(`Subconta vitalícia de ${mae.nome}`);
+      }
+      reload();
+    } catch (e: any) { toast.error(e?.message); }
   }
 
   async function doExtend(c: any) {
@@ -157,6 +182,9 @@ function EmpresasPage() {
                 </div>
                 <div className="col-span-2">
                   <StatusBadge s={c.status_cobranca} />
+                  {c.conta_mae_nome && (
+                    <div className="text-[11px] text-muted-foreground truncate mt-0.5">subconta de {c.conta_mae_nome}</div>
+                  )}
                 </div>
                 <div className="col-span-2 text-xs text-muted-foreground">
                   {c.trial_ate ? new Date(c.trial_ate).toLocaleDateString("pt-BR") : "—"}
@@ -176,6 +204,10 @@ function EmpresasPage() {
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => doGrantCredits(c)} title="Créditos de IA">
                     <Sparkles className="size-3.5" />
+                  </Button>
+                  <Button size="sm" variant={c.status_cobranca === "vitalicio" ? "default" : "outline"} onClick={() => toggleVitalicia(c)}
+                    title={c.status_cobranca === "vitalicio" ? "Tirar das subcontas vitalícias" : "Tornar subconta vitalícia"}>
+                    <InfinityIcon className="size-3.5" />
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => doExtend(c)} title="Estender trial">
                     <CalendarClock className="size-3.5" />
@@ -291,5 +323,6 @@ function Field({ k, v }: { k: string; v: any }) {
 function StatusBadge({ s }: { s: string }) {
   if (s === "ativo") return <Badge className="bg-primary">Ativa</Badge>;
   if (s === "trial") return <Badge variant="secondary">Trial</Badge>;
+  if (s === "vitalicio") return <Badge className="bg-violet-600">Vitalícia</Badge>;
   return <Badge variant="destructive">Suspensa</Badge>;
 }
