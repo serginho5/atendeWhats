@@ -244,7 +244,11 @@ export async function evoFetchNumberFromInstance(instanceName: string): Promise<
       method: "GET",
     });
     const inst = Array.isArray(data) ? data[0] : data?.[0] ?? data;
-    return inst?.instance?.owner || inst?.owner || inst?.number || null;
+    // Conexão por QR na Evolution v2: o número vem em ownerJid ("5511...@s.whatsapp.net");
+    // owner/number só vinham preenchidos em versões antigas ou na conexão por código.
+    const bruto = inst?.instance?.owner || inst?.owner || inst?.ownerJid || inst?.instance?.ownerJid || inst?.number || null;
+    const digitos = bruto ? String(bruto).split("@")[0].split(":")[0].replace(/\D/g, "") : "";
+    return digitos || null;
   } catch {
     return null;
   }
