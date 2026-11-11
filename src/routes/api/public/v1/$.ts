@@ -22,6 +22,12 @@ async function handle(request: Request) {
   const resource = url.searchParams.get("resource") || "contacts";
 
   if (request.method === "GET") {
+    if (resource === "instance") {
+      // Status do WhatsApp desta empresa (para a máquina de vendas saber se o chip está no ar)
+      const { data: inst } = await (supabaseAdmin as any).from("whatsapp_instances")
+        .select("numero, status").eq("company_id", companyId).maybeSingle();
+      return Response.json({ numero: inst?.numero ?? null, status: inst?.status ?? "disconnected" });
+    }
     if (resource === "contacts") {
       const { data } = await (supabaseAdmin as any).from("crm_cards")
         .select("id, numero, contato_nome, tags, stage_id, valor, utm_source, utm_medium, utm_campaign, created_at")
@@ -42,6 +48,28 @@ async function handle(request: Request) {
 
   if (request.method === "POST") {
     const body = await request.json().catch(() => ({})) as any;
+    if (resource === "checknumbers") {
+      // Confere quais números têm WhatsApp (sem enviar mensagem)
+      const { conferirNumeros, ProspectError } = await import("@/lib/prospect.server");
+      try {
+        return Response.json(await conferirNumeros(companyId, body));
+      } catch (e: any) {
+        const status = e instanceof ProspectError ? e.status : 500;
+        return new Response(JSON.stringify({ error: String(e?.message ?? e) }), { status, headers: { "Content-Type": "application/json" } });
+      }
+    }
+    if (resource === "prospect") {
+      // Primeiro contato de prospecção (imagens + texto), registrado no histórico do agente
+      if (!userId) return new Response(JSON.stringify({ error: "Token sem owner; recrie o token." }), { status: 400 });
+      const { enviarProspeccao, ProspectError } = await import("@/lib/prospect.server");
+      try {
+        return Response.json(await enviarProspeccao(companyId, userId, body));
+      } catch (e: any) {
+        const status = e instanceof ProspectError ? e.status : 500;
+        const code = e instanceof ProspectError ? e.code : "erro_envio";
+        return new Response(JSON.stringify({ error: String(e?.message ?? e), code }), { status, headers: { "Content-Type": "application/json" } });
+      }
+    }
     if (resource === "messages") {
       const numero = String(body.numero || "").replace(/\D/g, "");
       const texto = String(body.texto || "");

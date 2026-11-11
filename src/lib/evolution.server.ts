@@ -171,6 +171,14 @@ export async function evoSetWebhook(instanceName: string, webhookUrl: string) {
   });
 }
 
+// Envia uma imagem (base64 puro, sem "data:...;base64,"). Usado na prospecção (isca da máquina de vendas).
+export async function evoSendImage(instanceName: string, number: string, base64: string, mimetype = "image/png", fileName = "imagem.png", caption = "") {
+  return evo(`/message/sendMedia/${encodeURIComponent(instanceName)}`, {
+    method: "POST",
+    json: { number, mediatype: "image", mimetype, media: base64, fileName, caption },
+  });
+}
+
 export async function evoSendText(instanceName: string, number: string, text: string) {
   return evo(`/message/sendText/${encodeURIComponent(instanceName)}`, {
     method: "POST",
@@ -252,4 +260,12 @@ export async function evoFetchNumberFromInstance(instanceName: string): Promise<
   } catch {
     return null;
   }
+}
+
+// Confere quais números têm WhatsApp, sem mandar mensagem. Devolve [{ number, exists, jid }].
+export async function evoCheckNumbers(instanceName: string, numbers: string[]) {
+  return evo<any[]>(`/chat/whatsappNumbers/${encodeURIComponent(instanceName)}`, {
+    method: "POST",
+    json: { numbers },
+  });
 }
