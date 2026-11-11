@@ -162,7 +162,7 @@ export function AppShell({
 function Sidebar({
   loc, company, isSuperAdmin, isAdmin, primary, userName, email, roleLabel, signOut,
 }: any) {
-  const hasFinanceiro = featuresFor(company?.selected_plan_slug).financeiro;
+  const hasFinanceiro = featuresFor(company?.status_cobranca === "vitalicio" ? "vitalicio" : company?.selected_plan_slug).financeiro;
   return (
     <aside className="hidden md:flex w-[260px] min-h-screen border-r border-[color:var(--hairline)] bg-[color:var(--sidebar-bg)] flex-col">
       <div className="px-5 py-5 flex items-center gap-3 border-b border-[color:var(--hairline)]">

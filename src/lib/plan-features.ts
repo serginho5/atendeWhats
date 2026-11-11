@@ -59,6 +59,8 @@ export function normalizePlanSlug(slug?: string | null): PlanSlug {
 export function featuresFor(slug?: string | null): PlanFeatures {
   // Durante o trial o cliente experimenta os recursos do Pro (inclui Google Agenda).
   if (String(slug || "").toLowerCase() === "trial") return PLAN_FEATURES.pro;
+  // Subconta vitalícia (status_cobranca = 'vitalicio'): tudo do plano mais alto
+  if (String(slug || "").toLowerCase() === "vitalicio") return PLAN_FEATURES.business;
   return PLAN_FEATURES[normalizePlanSlug(slug)];
 }
 
