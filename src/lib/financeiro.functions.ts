@@ -14,7 +14,8 @@ async function getCompanyAndPlan(supabase: any, userId: string) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const planSlug = String(sub?.plan?.nome || "starter").toLowerCase();
+  // Subconta vitalícia tem tudo do plano mais alto
+  const planSlug = company?.status_cobranca === "vitalicio" ? "business" : String(sub?.plan?.nome || "starter").toLowerCase();
   return { companyId: cu.company_id, role: cu.role, company: cu.company, planSlug };
 }
 

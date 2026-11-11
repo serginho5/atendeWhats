@@ -67,12 +67,11 @@ export const createApiToken = createServerFn({ method: "POST" })
   .inputValidator((d: { label: string }) => d)
   .handler(async ({ context, data }) => {
     const cid = await resolveCompanyId(context.supabase, context.userId);
-    // Gating: apenas Business
-    const { data: sub } = await context.supabase
-      .from("subscription").select("plan:plan(slug)")
-      .eq("company_id", cid).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    const slug = (sub as any)?.plan?.slug ?? "starter";
-    if (slug !== "business") throw new Error("API pública disponível apenas no plano Business.");
+    // Gating: recurso "apiWebhooks" do plano (Business, ou subconta vitalícia)
+    const { getCompanyPlan } = await import("./plan-limits.server");
+    const { featuresFor } = await import("./plan-features");
+    const plan = await getCompanyPlan(cid);
+    if (!featuresFor(plan.rawSlug || plan.slug).apiWebhooks) throw new Error("API pública disponível apenas no plano Business.");
     const { data: row, error } = await context.supabase
       .from("api_token").insert({ company_id: cid, label: data.label, criado_por: context.userId })
       .select("*").maybeSingle();
