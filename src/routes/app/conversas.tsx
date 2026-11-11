@@ -68,6 +68,32 @@ function ConversasPage() {
   const [sending, setSending] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
 
+  // A conversa aberta fica num ref: assim a escuta de mensagens novas não é desfeita e refeita
+  // a cada clique (recriar o canal com o mesmo nome logo depois de removê-lo falhava em silêncio).
+  const activeRef = useRef<string | null>(null);
+  useEffect(() => { activeRef.current = active; }, [active]);
+
+  // Junta mensagens novas sem duplicar (chegam pelo tempo real e/ou pela checagem periódica).
+  // Devolve só as que ainda não tinham sido vistas.
+  const vistas = useRef<Set<string>>(new Set());
+  function mergeMsgs(novas: Msg[]): Msg[] {
+    const add = novas.filter((x: any) => x?.id && !vistas.current.has(x.id));
+    if (!add.length) return [];
+    add.forEach((x: any) => vistas.current.add(x.id));
+    setMsgs((p) => [...add, ...p].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 500));
+    return add;
+  }
+  function onNovaMensagem(m: Msg) {
+    if (m.direcao === "entrada" && m.numero !== activeRef.current) {
+            setUnread((u) => ({ ...u, [m.numero]: (u[m.numero] ?? 0) + 1 }));
+            try {
+              if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
+                new Notification(m.contato_nome ?? m.numero, { body: m.texto?.slice(0, 140) ?? "Nova mensagem", tag: m.numero });
+              }
+            } catch {}
+    }
+  }
+
   useEffect(() => {
     if (!companyId) return;
     void load(companyId);
@@ -75,26 +101,31 @@ function ConversasPage() {
       .channel(`tenant:${companyId}:mensagens`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "mensagens", filter: `company_id=eq.${companyId}` },
-        (payload) => {
-          const m = payload.new as Msg;
-          setMsgs((p) => [m, ...p].slice(0, 500));
-          if (m.direcao === "entrada" && m.numero !== active) {
-            setUnread((u) => ({ ...u, [m.numero]: (u[m.numero] ?? 0) + 1 }));
-            try {
-              if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
-                new Notification(m.contato_nome ?? m.numero, { body: m.texto?.slice(0, 140) ?? "Nova mensagem", tag: m.numero });
-              }
-            } catch {}
-          }
-        },
+        (payload) => { mergeMsgs([payload.new as Msg]).forEach(onNovaMensagem); },
       )
       .on("postgres_changes",
         { event: "*", schema: "public", table: "contact_pause", filter: `company_id=eq.${companyId}` },
         () => { void loadPauses(companyId); },
       )
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [companyId, active]);
+
+    // Plano B: a cada 4 s (com a aba visível) busca o que chegou desde a última mensagem.
+    // Garante que a conversa atualiza mesmo se o tempo real do Supabase falhar ou estiver desligado.
+    let ultima = new Date().toISOString();
+    const timer = setInterval(async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const { data } = await supabase.from("mensagens").select("*").eq("company_id", companyId)
+        .gt("created_at", ultima).order("created_at", { ascending: true }).limit(100);
+      const novas = (data ?? []) as Msg[];
+      if (!novas.length) return;
+      ultima = novas[novas.length - 1].created_at;
+      mergeMsgs(novas).forEach(onNovaMensagem);
+      void loadPauses(companyId);
+    }, 4000);
+
+    return () => { clearInterval(timer); supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
 
   useEffect(() => {
     if (active) setUnread((u) => ({ ...u, [active]: 0 }));
@@ -132,6 +163,7 @@ function ConversasPage() {
       supabase.from("company_user").select("user_id,profiles(nome,email)").eq("company_id", cid).eq("ativo", true),
     ]);
     setMsgs((m ?? []) as Msg[]);
+    vistas.current = new Set(((m ?? []) as any[]).map((x) => x.id));
     const map: Record<string, LeadCard> = {};
     (c ?? []).forEach((r: any) => { map[r.numero] = r; });
     setCards(map);
