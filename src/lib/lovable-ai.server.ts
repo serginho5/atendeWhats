@@ -2,7 +2,9 @@
 // OpenAI e Anthropic usam a chave da própria empresa.
 import { fetchWithTimeout } from "./fetch-with-timeout";
 
-const AI_TIMEOUT_MS = 30000;
+// 30 s com 12 s por tentativa davam só 2 modelos quando o Gemini estava lento (logs de 27 e 28/10:
+// todos os modelos estouraram e o cliente ficou sem resposta). 45 s dá margem para 3 a 4 tentativas.
+const AI_TIMEOUT_MS = 45000;
 
 export interface ChatMsg {
   role: "system" | "user" | "assistant";

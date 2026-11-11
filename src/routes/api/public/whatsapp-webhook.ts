@@ -276,7 +276,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               .eq("company_id", companyId)
               .eq("numero", number)
               .order("created_at", { ascending: false })
-              .limit(25),
+              .limit(50), // 25 mensagens (com respostas em partes) eram só ~8 trocas: a IA esquecia o começo
             supabaseAdmin
               .from("crm_cards")
               .select("status, nome, stage_id")
@@ -537,7 +537,8 @@ async function getAiThrottleReason(admin: any, companyId: string, numero: string
       .gte("created_at", new Date(now - 60_000).toISOString()),
   ]);
 
-  if ((contactRecent.count ?? 0) >= 6) return "contact-rate-limit";
+  // Antes era 6, mas cada resposta em partes grava 2-3 mensagens: 3 respostas em 10 min já travavam a IA (logs de 27/10 e 07/11).
+  if ((contactRecent.count ?? 0) >= 18) return "contact-rate-limit";
   if ((companyRecent.count ?? 0) >= 20) return "company-rate-limit";
   return null;
 }
