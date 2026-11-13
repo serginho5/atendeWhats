@@ -60,6 +60,18 @@ async function handle(request: Request) {
         return new Response(JSON.stringify({ error: String(e?.message ?? e) }), { status, headers: { "Content-Type": "application/json" } });
       }
     }
+    if (resource === "reforco") {
+      // Reforço da isca (só texto, 1 por contato, só para quem nunca respondeu)
+      if (!userId) return new Response(JSON.stringify({ error: "Token sem owner; recrie o token." }), { status: 400 });
+      const { enviarReforco, ProspectError } = await import("@/lib/prospect.server");
+      try {
+        return Response.json(await enviarReforco(companyId, userId, body));
+      } catch (e: any) {
+        const status = e instanceof ProspectError ? e.status : 500;
+        const code = e instanceof ProspectError ? e.code : "erro_envio";
+        return new Response(JSON.stringify({ error: String(e?.message ?? e), code }), { status, headers: { "Content-Type": "application/json" } });
+      }
+    }
     if (resource === "prospect") {
       // Primeiro contato de prospecção (imagens + texto), registrado no histórico do agente
       if (!userId) return new Response(JSON.stringify({ error: "Token sem owner; recrie o token." }), { status: 400 });

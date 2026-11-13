@@ -307,6 +307,16 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             return new Response("human-active", { status: 200 });
           }
 
+          // Isca em duas etapas (prospecção): se há prévia guardada para este contato, a IA conversa com o
+          // material da isca no contexto e decide a hora de mostrar os prints (marcador [MOSTRAR_PREVIA]).
+          let iscaPendente: { id: string; textos: string[]; ref_externa: string | null } | null = null;
+          try {
+            const { buscarIscaPendente } = await import("@/lib/prospect.server");
+            iscaPendente = await buscarIscaPendente(companyId, number, text);
+          } catch (e: any) {
+            console.error("[isca pendente]", e?.message);
+          }
+
           const historico = (histDesc ?? []).slice().reverse();
 
           const estagioAtual = cardRow?.status || stages[0]?.nome || "Conversas";
@@ -314,7 +324,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
 
 
           const responderEmPartes = cfg?.responder_em_partes ?? true;
-          const system = buildSystemPrompt(cfg ?? {}, {
+          let system = buildSystemPrompt(cfg ?? {}, {
             responderEmPartes,
             estagioAtual,
             resumoContato,
@@ -322,6 +332,10 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             stages: stages.map((s) => ({ nome: s.nome, tipo: s.tipo })),
             googleConectado: !!googleIntegration?.conectado,
           });
+          if (iscaPendente) {
+            const { instrucaoIsca } = await import("@/lib/prospect.server");
+            system += instrucaoIsca(iscaPendente);
+          }
 
           const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
             { role: "system", content: system },
@@ -384,6 +398,10 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.error("[ai]", e?.message);
           }
 
+          // [MOSTRAR_PREVIA]: a IA decidiu mostrar os prints da isca guardada (enviados depois das partes de texto)
+          const { MARCADOR_PREVIA } = await import("@/lib/prospect.server");
+          const mostrarPrevia = !!iscaPendente && new RegExp(MARCADOR_PREVIA.source, "i").test(rawReply);
+          rawReply = rawReply.replace(MARCADOR_PREVIA, "").trim();
           const { parts, stage, agendar, valor: valorGanho, handoff } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
 
@@ -455,6 +473,15 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               }
             } catch (e: any) {
               console.error("[send]", e?.message);
+            }
+          }
+
+          if (mostrarPrevia) {
+            try {
+              const { enviarPrintsPendentes } = await import("@/lib/prospect.server");
+              await enviarPrintsPendentes(companyId, userId, instanceName, number, pushName ?? null);
+            } catch (e: any) {
+              console.error("[isca prints]", e?.message);
             }
           }
 
