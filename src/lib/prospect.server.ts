@@ -163,7 +163,19 @@ export async function enviarProspeccao(companyId: string, userId: string, body: 
 // ela recebe no contexto o material real da isca, trabalha as objeções e, na hora certa, escreve [MOSTRAR_PREVIA];
 // o webhook então envia os prints guardados logo depois da mensagem dela. Resposta negativa cancela a isca.
 const NEGATIVO = /n[aã]o (tenho |temos )?interesse|n[aã]o (quero|queremos|preciso)|desinteress|n[aã]o (mande|envie)|spam|golpe|quem te deu (meu|esse) n[uú]mero/i;
-export const MARCADOR_PREVIA = /\[\s*MOSTRAR[_ ]PREVIA\s*\]/gi;
+// Resposta que chega até 15 s depois do 1º envio de prospecção = saudação automática do WhatsApp Business (robô),
+// não uma pessoa (casos reais de 11/11: 3 a 4 s). A IA não conversa com ela e o reforço não a conta como resposta.
+const JANELA_AUTOMATICA_MS = 15_000;
+export async function ehRespostaAutomatica(companyId: string, numero: string, recebidaEm: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any).from("mensagens").select("created_at")
+    .eq("company_id", companyId).eq("numero", numero).eq("direcao", "saida").eq("autor", "prospeccao")
+    .order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (!data?.created_at) return false;
+  const dt = new Date(recebidaEm).getTime() - new Date(data.created_at).getTime();
+  return dt >= 0 && dt <= JANELA_AUTOMATICA_MS;
+}
+export const MARCADOR_PREVIA =/\[\s*MOSTRAR[_ ]PREVIA\s*\]/gi;
 
 export async function buscarIscaPendente(companyId: string, numero: string, textoRecebido: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -254,7 +266,9 @@ export async function enviarReforco(companyId: string, userId: string, body: any
   const msgs: any[] = conversa ?? [];
   const textosProsp = msgs.filter((m) => m.direcao === "saida" && m.autor === "prospeccao" && !String(m.texto || "").startsWith("[imagem]"));
   if (!textosProsp.length) throw new ProspectError("não há isca enviada para este número nesta empresa", 409, "sem_isca");
-  if (msgs.some((m) => m.direcao === "entrada")) throw new ProspectError("o contato já respondeu: o reforço não é enviado", 409, "respondeu");
+  // saudação automática do WhatsApp Business (chega segundos depois da isca) não conta como resposta
+  const t0 = new Date(msgs.find((m) => m.direcao === "saida" && m.autor === "prospeccao")?.created_at ?? 0).getTime();
+  if (msgs.some((m) => m.direcao === "entrada" && new Date(m.created_at).getTime() - t0 > JANELA_AUTOMATICA_MS)) throw new ProspectError("o contato já respondeu: o reforço não é enviado", 409, "respondeu");
   if (msgs.some((m) => m.direcao === "saida" && m.autor === "reforco")) throw new ProspectError("este contato já recebeu o reforço", 409, "ja_reforcado");
   const dias = (Date.now() - new Date(textosProsp[0].created_at).getTime()) / 864e5;
   if (dias < MIN_DIAS_REFORCO) throw new ProspectError(`a isca foi enviada há menos de ${MIN_DIAS_REFORCO} dias`, 409, "cedo_demais");

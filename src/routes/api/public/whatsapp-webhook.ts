@@ -311,7 +311,13 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           // material da isca no contexto e decide a hora de mostrar os prints (marcador [MOSTRAR_PREVIA]).
           let iscaPendente: { id: string; textos: string[]; ref_externa: string | null } | null = null;
           try {
-            const { buscarIscaPendente } = await import("@/lib/prospect.server");
+            const { buscarIscaPendente, ehRespostaAutomatica } = await import("@/lib/prospect.server");
+            // Saudação automática (robô do WhatsApp Business) logo depois da prospecção: a IA não conversa com robô;
+            // espera uma pessoa responder (a isca continua pendente e o reforço ainda vale).
+            if (await ehRespostaAutomatica(companyId, number, myCreatedAt)) {
+              await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+              return new Response("auto-reply", { status: 200 });
+            }
             iscaPendente = await buscarIscaPendente(companyId, number, text);
           } catch (e: any) {
             console.error("[isca pendente]", e?.message);
