@@ -173,7 +173,12 @@ const TEXTO_AUTOMATICO = /estamos ausentes|n[oa] momento (n[aã]o )?(estamos|pod
 export const pareceAutomatica = (texto: string) => TEXTO_AUTOMATICO.test(texto || "");
 const AUTORES_PROSPECCAO = ["prospeccao", "reforco"];
 
-export async function ehRespostaAutomatica(companyId: string, numero: string, recebidaEm: string, texto = "") {
+// Sinais de pessoa (caso real de 17/11: a secretária da Dra. Audrey mandou ÁUDIO dizendo "Bom dia, Cátia...
+// Seja bem-vinda à Personalized Concept... posso ajudar?" e a Katia ficou calada). Robô não manda voz e não
+// sabe o nome de quem escreveu; quem cita a Katia leu a nossa mensagem.
+const CITA_CONSULTORA = /[kc][aá]t(h)?ia/i;
+export async function ehRespostaAutomatica(companyId: string, numero: string, recebidaEm: string, texto = "", opts: { audio?: boolean } = {}) {
+  if (opts.audio || CITA_CONSULTORA.test(texto || "")) return false;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   // a última mensagem nossa antes desta (abertura, reforço ou conversa da IA/humano)
   const { data } = await (supabaseAdmin as any).from("mensagens").select("autor, created_at")
@@ -208,6 +213,7 @@ Material REAL desta prospecção (use à vontade, com as suas palavras; não inv
 ${(p.textos || []).join("\n\n")}
 """
 Como conduzir:
+- ATENÇÃO: o contato ainda NÃO recebeu nenhuma imagem. A abertura foi só: "Olá, aqui é a Katia, da AW3S. Falo com o responsável pela empresa?". Não pergunte se ele "viu a demonstração/prévia" nem fale de imagens "acima" ou "que mandei". Se quem respondeu for funcionário(a) ou secretária, seja simpática, diga em 1 ou 2 frases quem você é e por que escreveu, e ofereça mostrar a prévia para ele(a) repassar ao responsável.
 - Converse de forma natural e curta, como uma pessoa. Responda dúvidas e objeções com calma ("quem é você?", "quanto custa?", "não tenho tempo", "já tenho site"…), sempre puxando para mostrar a prévia: é ela que gera o interesse.
 - Quando o contato topar ver, mostrar curiosidade ou for o momento natural, escreva uma frase curta apresentando a prévia e coloque no FINAL da resposta o marcador [MOSTRAR_PREVIA]. O sistema envia os prints do site logo depois da sua mensagem. Use o marcador uma única vez e não diga que "vai enviar imagens" sem usá-lo.
 - Depois dos prints, convide-o a responder SIM para receber a versão completa e navegar pelo celular.

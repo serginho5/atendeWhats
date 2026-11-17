@@ -314,7 +314,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             const { buscarIscaPendente, ehRespostaAutomatica } = await import("@/lib/prospect.server");
             // Saudação automática (robô do WhatsApp Business) logo depois da prospecção: a IA não conversa com robô;
             // espera uma pessoa responder (a isca continua pendente e o reforço ainda vale).
-            if (await ehRespostaAutomatica(companyId, number, myCreatedAt, text)) {
+            if (await ehRespostaAutomatica(companyId, number, myCreatedAt, text, { audio: !!msg.audioMessage })) {
               await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
               return new Response("auto-reply", { status: 200 });
             }
