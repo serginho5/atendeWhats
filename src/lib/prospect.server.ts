@@ -56,11 +56,25 @@ async function checarLimite(admin: any, companyId: string, body: any, autor: "pr
   return { hoje: (hoje ?? []) as any[], limite };
 }
 
+// Número como o WhatsApp registra o contato (2026-11-20, caso Mania Games): celulares antigos de DDD 31 para cima
+// costumam estar SEM o 9 ("554796471395"). Se a abertura sai com o 9, a resposta chega pelo número sem 9, vira
+// "outra conversa" e a IA perde o contexto da prospecção (e não reconhece o robô). Pergunta ao WhatsApp o jid.
+async function numeroCanonico(instanceName: string, numero: string): Promise<string> {
+  try {
+    const { evoCheckNumbers } = await import("@/lib/evolution.server");
+    const r = await evoCheckNumbers(instanceName, [numero]);
+    const x = (Array.isArray(r) ? r : [])[0];
+    const jid = String(x?.jid || "").split("@")[0].replace(/\D/g, "");
+    if (x?.exists && jid.length >= 12 && jid.length <= 13 && jid.slice(-8) === numero.slice(-8)) return jid;
+  } catch (e: any) { console.error("[numero canonico]", e?.message); }
+  return numero;
+}
+
 export async function enviarProspeccao(companyId: string, userId: string, body: any) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const admin = supabaseAdmin as any;
 
-  const numero = String(body?.numero || "").replace(/\D/g, "");
+  let numero = String(body?.numero || "").replace(/\D/g, "");
   // texto único OU textos em blocos (cada um vira uma mensagem, com "digitando…" antes)
   const textos: string[] = (Array.isArray(body?.textos) ? body.textos : [body?.texto]).map((t: any) => String(t || "").trim()).filter(Boolean).slice(0, 4);
   const texto = textos.join("\n\n");
@@ -88,6 +102,7 @@ export async function enviarProspeccao(companyId: string, userId: string, body: 
   const { data: inst } = await admin.from("whatsapp_instances")
     .select("instance_name, status").eq("company_id", companyId).maybeSingle();
   if (!inst || inst.status !== "connected") throw new ProspectError("WhatsApp desta empresa não está conectado", 409, "desconectado");
+  numero = await numeroCanonico(inst.instance_name, numero); // grava tudo no número que o WhatsApp usa (com ou sem 9)
 
   // Pausado ou pediu para sair: nunca envia
   const { data: pausa } = await admin.from("contact_pause")
@@ -380,7 +395,7 @@ const MIN_DIAS_REFORCO = 2;
 export async function enviarReforco(companyId: string, userId: string, body: any) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const admin = supabaseAdmin as any;
-  const numero = String(body?.numero || "").replace(/\D/g, "");
+  let numero = String(body?.numero || "").replace(/\D/g, "");
   // Em blocos: textos = ["msg 1", "msg 2", …] (até 4), enviados como mensagens separadas com "digitando…" entre elas.
   const textos: string[] = (Array.isArray(body?.textos) ? body.textos : [body?.texto]).map((t: any) => String(t || "").trim()).filter(Boolean);
   if (numero.length < 12 || numero.length > 13) throw new ProspectError("numero inválido (use DDI+DDD+número, ex.: 5515999999999)", 400, "numero_invalido");
@@ -391,6 +406,13 @@ export async function enviarReforco(companyId: string, userId: string, body: any
   const { data: inst } = await admin.from("whatsapp_instances")
     .select("instance_name, status").eq("company_id", companyId).maybeSingle();
   if (!inst || inst.status !== "connected") throw new ProspectError("WhatsApp desta empresa não está conectado", 409, "desconectado");
+  // A abertura nova já fica gravada no número do WhatsApp (com ou sem 9); usa esse número se a prospecção estiver nele
+  const canon = await numeroCanonico(inst.instance_name, numero);
+  if (canon !== numero) {
+    const { count } = await admin.from("mensagens").select("id", { count: "exact", head: true })
+      .eq("company_id", companyId).eq("numero", canon).eq("autor", "prospeccao");
+    if ((count ?? 0) > 0) numero = canon;
+  }
   const { data: pausa } = await admin.from("contact_pause")
     .select("pausado").eq("company_id", companyId).eq("numero", numero).maybeSingle();
   if (pausa?.pausado) throw new ProspectError("contato pausado ou pediu para não receber mensagens", 409, "pausado");
