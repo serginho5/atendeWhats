@@ -311,14 +311,20 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           // material da isca no contexto e decide a hora de mostrar os prints (marcador [MOSTRAR_PREVIA]).
           let iscaPendente: { id: string; textos: string[]; ref_externa: string | null } | null = null;
           try {
-            const { buscarIscaPendente, ehRespostaAutomatica } = await import("@/lib/prospect.server");
-            // Saudação automática (robô do WhatsApp Business) logo depois da prospecção: a IA não conversa com robô;
-            // espera uma pessoa responder (a isca continua pendente e o reforço ainda vale).
+            const { buscarIscaPendente, ehRespostaAutomatica, pedirPessoa, apresentarDado } = await import("@/lib/prospect.server");
+            // Saudação automática (robô do WhatsApp Business) logo depois da prospecção: a IA não conversa com robô.
+            // Trilha Atende+ (2026-11-20): a Katia pede UMA vez para falar com uma pessoa e espera; a prospecção vira Atende+.
             if (await ehRespostaAutomatica(companyId, number, myCreatedAt, text, { audio: !!msg.audioMessage })) {
               await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+              try { await pedirPessoa(companyId, userId, instanceName, number, pushName ?? null); } catch (e: any) { console.error("[atende+ pedir pessoa]", e?.message); }
               return new Response("auto-reply", { status: 200 });
             }
             iscaPendente = await buscarIscaPendente(companyId, number, text);
+            // Uma pessoa respondeu depois do pedido: sai o texto fixo com o dado real (sem IA nesta mensagem)
+            if (iscaPendente && await apresentarDado(companyId, userId, instanceName, number, pushName ?? null, iscaPendente)) {
+              await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+              return new Response("atende-dado", { status: 200 });
+            }
           } catch (e: any) {
             console.error("[isca pendente]", e?.message);
           }
@@ -339,8 +345,22 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             googleConectado: !!googleIntegration?.conectado,
           });
           if (iscaPendente) {
-            const { instrucaoIsca } = await import("@/lib/prospect.server");
+            const { instrucaoIsca, MARCADOR_ATENDE } = await import("@/lib/prospect.server");
             system += instrucaoIsca(iscaPendente);
+            // Trilha Atende+ (2026-11-20): a Katia consulta a agenda de verdade antes de sugerir horário de reunião
+            if ((iscaPendente.textos || [])[0] === MARCADOR_ATENDE && googleIntegration?.conectado) {
+              try {
+                const { parseJanelaAgendamento } = await import("@/lib/ai-prompt");
+                const { horariosLivresEmpresa } = await import("@/lib/google.server");
+                const j = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
+                const livres = await horariosLivresEmpresa(supabaseAdmin, companyId, { ...j, duracaoMin: 30, antecedenciaMin: 60, quantosDias: 2 });
+                const porDia: Record<string, string[]> = {};
+                for (const h of livres) (porDia[h.dia] ||= []).push(`${h.hora} (${h.inicio})`);
+                system += `\n\nHORÁRIOS LIVRES DE VERDADE na agenda do Sérgio (blocos de 30 min; consultado agora, use só estes):\n` +
+                  (Object.keys(porDia).length ? Object.entries(porDia).map(([d, hs]) => `- ${d}: ${hs.join(", ")}`).join("\n") : "- nenhum horário livre hoje nem amanhã: peça um dia de preferência e diga que o Sérgio confirma") +
+                  `\nPara marcar, use o horário de início exato entre parênteses e termine 30 min depois.`;
+              } catch (e: any) { console.error("[atende+ horarios]", e?.message); }
+            }
           }
 
           const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -432,9 +452,13 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                   titulo: agendar.titulo,
                   inicio: agendar.inicio,
                   fim: agendar.fim,
-                  descricao: `Agendado via WhatsApp — ${pushName || number}`,
+                  descricao: `Agendado via WhatsApp — ${pushName || number} (+${number})${agendar.email ? ` · ${agendar.email}` : ""}`,
+                  convidado: agendar.email || null,
                 });
-                confirmacaoAgenda = ev.meetLink
+                // com e-mail (2026-11-20): o Google manda o convite; a confirmação já pede para conferir se chegou
+                confirmacaoAgenda = ev.convidado
+                  ? `Prontinho! Reunião marcada para ${quando}, pelo Google Meet${ev.meetLink ? ` (${ev.meetLink})` : ""}. Acabei de enviar o convite para ${ev.convidado}. Confere se chegou?`
+                  : ev.meetLink
                   ? `Prontinho! Reunião confirmada para ${quando}. Link do Google Meet: ${ev.meetLink}`
                   : `Prontinho! Agendado para ${quando}. Já está na nossa agenda ✅`;
               }

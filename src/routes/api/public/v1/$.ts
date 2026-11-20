@@ -45,6 +45,23 @@ async function handle(request: Request) {
       const { data } = await q;
       return Response.json({ data: data ?? [] });
     }
+    if (resource === "reunioes") {
+      // Tela de Reuniões da máquina de vendas (2026-11-20): reuniões dos últimos 7 dias em diante (com Meet e convidado,
+      // lidos do Google) + horários livres de hoje e amanhã + a janela configurada no agente.
+      const admin = supabaseAdmin as any;
+      const { data: ags } = await admin.from("agendamento").select("id, titulo, inicio, fim, status, google_event_id, created_at")
+        .eq("company_id", companyId).gte("inicio", new Date(Date.now() - 7 * 864e5).toISOString()).order("inicio", { ascending: true }).limit(60);
+      const { data: gi } = await admin.from("google_integration").select("conectado").eq("company_id", companyId).maybeSingle();
+      const { data: cfg } = await admin.from("agent_config").select("agendamento_ativo, horarios_disponiveis, duracao_padrao").eq("company_id", companyId).maybeSingle();
+      const out: any = { google: !!gi?.conectado, agendamento_ativo: !!cfg?.agendamento_ativo, horarios_disponiveis: cfg?.horarios_disponiveis || "", reunioes: ags ?? [], livres: [] };
+      if (gi?.conectado) {
+        const { detalhesEventoEmpresa, horariosLivresEmpresa } = await import("@/lib/google.server");
+        const { parseJanelaAgendamento } = await import("@/lib/ai-prompt");
+        out.reunioes = await Promise.all(out.reunioes.map(async (r: any) => ({ ...r, ...(r.google_event_id && new Date(r.fim).getTime() > Date.now() - 864e5 ? await detalhesEventoEmpresa(admin, companyId, r.google_event_id).catch(() => null) : {}) })));
+        try { out.livres = await horariosLivresEmpresa(admin, companyId, { ...parseJanelaAgendamento(cfg?.horarios_disponiveis), duracaoMin: 30, antecedenciaMin: 60, quantosDias: 2 }); } catch (e: any) { out.erro_livres = String(e?.message || e); }
+      }
+      return Response.json(out);
+    }
     return new Response(JSON.stringify({ error: "Unknown resource" }), { status: 400 });
   }
 

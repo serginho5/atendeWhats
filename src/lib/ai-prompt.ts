@@ -395,7 +395,7 @@ export function validaHorarioAgendamento(inicioISO: string, janela: JanelaAgenda
   return null;
 }
 
-export interface AgendarBrief { inicio: string; fim: string; titulo: string; }
+export interface AgendarBrief { inicio: string; fim: string; titulo: string; email?: string | null; }
 
 export function parseAiOutput(
   raw: string,
@@ -421,6 +421,8 @@ export function parseAiOutput(
         inicio: parts[0],
         fim: parts[1],
         titulo: (parts[2] || "Agendamento").slice(0, 120),
+        // 4º campo opcional: e-mail do convidado (o Google manda o convite da reunião)
+        email: (parts.slice(3).find((p) => /@/.test(p)) || "").trim() || null,
       };
     }
     text = text.replace(agMatch[0], "").trim();

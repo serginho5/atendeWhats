@@ -198,12 +198,131 @@ export async function buscarIscaPendente(companyId: string, numero: string, text
       .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente");
     return null;
   }
-  const { data } = await admin.from("prospeccao_pendente").select("id, textos, ref_externa")
+  const { data } = await admin.from("prospeccao_pendente").select("id, textos, ref_externa, erro")
     .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente").maybeSingle();
-  return (data as { id: string; textos: string[]; ref_externa: string | null } | null) ?? null;
+  return (data as { id: string; textos: string[]; ref_externa: string | null; erro?: string | null } | null) ?? null;
 }
 
-export function instrucaoIsca(p: { textos: string[] }) {
+export const MARCADOR_ATENDE = "[ATENDE+]";
+
+// ---- Robô de atendimento → trilha Atende+ no mesmo dia (usuário, 2026-11-20) ----
+// 1. O robô do contato respondeu à abertura: a Katia pede, UMA vez e ~75 s depois, para falar com uma pessoa. Isso chama a
+//    atenção do responsável para a conversa. A prospecção vira Atende+ (sem prints de site). Estado em prospeccao_pendente.erro:
+//    null → "pediu_pessoa" → "apresentou".
+// 2. Uma pessoa responde: sai o texto do Sérgio (fixo, sem IA) com o nome dela e o tempo real desde o 1º contato. Depois a
+//    IA conduz até "Posso te apresentar uma solução?" e a reunião.
+export const MENSAGEM_PEDIR_PESSOA = "Gostaria de falar com uma pessoa. Assim que possível, me chame por aqui!";
+const ATRASO_PEDIR_PESSOA_MS = 75_000;
+
+const tempoDesde = (iso: string) => {
+  const min = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (min < 60) return `${min} minuto${min > 1 ? "s" : ""}`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `${h} hora${h > 1 ? "s" : ""}`;
+  const d = Math.round(h / 24);
+  return `${d} dias`;
+};
+const primeiroNome = (n?: string | null) => {
+  const p = String(n || "").replace(/[^\p{L}\s'-]/gu, " ").trim().split(/\s+/)[0] || "";
+  return p.length >= 2 ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : "";
+};
+export function textoApresentarDado(nome: string, tempo: string) {
+  return [
+    `Olá, tudo bem${nome ? `, ${nome}` : ""}? Tenho um dado importante para te apresentar: meu primeiro contato com vocês foi há ${tempo}, e o sistema robotizado não me causou interesse em interagir com ele.`,
+    "Já imaginou quantos clientes encontram vocês no Google, caem no WhatsApp de vocês e desistem de contratar os seus serviços por se depararem com um robô?",
+  ];
+}
+
+async function enviarComoKatia(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null, textos: string[], autor: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { evoSendText, evoSendPresence } = await import("@/lib/evolution.server");
+  for (const [i, texto] of textos.entries()) {
+    const digitando = Math.min(7000, 2500 + texto.length * 35);
+    try { void evoSendPresence(instanceName, numero, "composing", digitando); } catch {}
+    await new Promise((r) => setTimeout(r, digitando));
+    await evoSendText(instanceName, numero, texto);
+    await (supabaseAdmin as any).from("mensagens").insert({ company_id: companyId, user_id: userId, numero, contato_nome: contatoNome, direcao: "saida", autor, texto });
+    if (i < textos.length - 1) await new Promise((r) => setTimeout(r, 1500 + Math.floor(Math.random() * 1500)));
+  }
+}
+
+// Chamado pelo webhook quando a resposta é de robô. Só age em prospecção com isca pendente e só uma vez (trava atômica no erro).
+export async function pedirPessoa(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const admin = supabaseAdmin as any;
+  const { data: pend } = await admin.from("prospeccao_pendente").select("id, textos, erro")
+    .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente").maybeSingle();
+  if (!pend || pend.erro) return false; // sem prospecção pendente, ou já pediu / já está na trilha Atende+
+  const { data: travou } = await admin.from("prospeccao_pendente")
+    .update({ erro: "pediu_pessoa", textos: [MARCADOR_ATENDE, "", MENSAGEM_PEDIR_PESSOA], imagens: [] })
+    .eq("id", pend.id).is("erro", null).select("id");
+  if (!travou?.length) return false;
+  setTimeout(async () => {
+    try {
+      // se uma pessoa já respondeu nesse meio-tempo, não pede mais
+      const { data: atual } = await admin.from("prospeccao_pendente").select("erro, status").eq("id", pend.id).maybeSingle();
+      if (!atual || atual.status !== "pendente" || atual.erro !== "pediu_pessoa") return;
+      // autor "prospeccao": as próximas mensagens automáticas do robô continuam sendo reconhecidas como robô
+      await enviarComoKatia(companyId, userId, instanceName, numero, contatoNome, [MENSAGEM_PEDIR_PESSOA], "prospeccao");
+      console.log(`[atende+] pediu pessoa → ${numero.slice(0, 4)}…${numero.slice(-4)}`);
+    } catch (e: any) { console.error("[atende+ pedir pessoa]", e?.message); }
+  }, ATRASO_PEDIR_PESSOA_MS);
+  return true;
+}
+
+// Chamado pelo webhook quando uma PESSOA responde numa conversa da trilha Atende+ que ainda não recebeu o dado.
+// Envia o texto fixo do Sérgio e devolve true (o webhook não chama a IA nesta mensagem).
+export async function apresentarDado(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null, pend: { id: string; textos: string[]; erro?: string | null }) {
+  if ((pend.textos || [])[0] !== MARCADOR_ATENDE || pend.erro !== "pediu_pessoa") return false;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const admin = supabaseAdmin as any;
+  const { data: travou } = await admin.from("prospeccao_pendente").update({ erro: "apresentou" }).eq("id", pend.id).eq("erro", "pediu_pessoa").select("id");
+  if (!travou?.length) return false;
+  const { data: primeira } = await admin.from("mensagens").select("created_at").eq("company_id", companyId).eq("numero", numero)
+    .eq("direcao", "saida").eq("autor", "prospeccao").order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const textos = textoApresentarDado(primeiroNome(contatoNome), tempoDesde(primeira?.created_at || new Date().toISOString()));
+  await admin.from("prospeccao_pendente").update({ textos: [MARCADOR_ATENDE, pend.textos?.[1] || "", textos.join("\n\n")] }).eq("id", pend.id);
+  await enviarComoKatia(companyId, userId, instanceName, numero, contatoNome, textos, "ia");
+  return true;
+}
+
+// Trilha Atende+ (2026-11-20): o contato tem robô de atendimento. O objetivo é marcar uma reunião sobre atendimento humanizado.
+// O site entra depois, como serviço agregado.
+function instrucaoAtende(roteiro: string, enviado: string, apresentou = false) {
+  return `
+
+## Prospecção Atende+: atendimento humanizado (NÃO é sobre site)
+Quem respondeu à nossa abertura foi um robô de atendimento automático deste contato. ${apresentou
+    ? "Quando uma pessoa finalmente respondeu, você já mandou esta mensagem, com o dado real:"
+    : "Você mandou esta mensagem, e o contato respondeu agora:"}
+"""
+${enviado}
+"""
+${apresentou ? `PRÓXIMO PASSO (a cartada): reaja ao que a pessoa disse em UMA frase curta e faça a pergunta rápida e objetiva "Posso te apresentar uma solução?". Só depois do "sim" explique a solução em poucas linhas e proponha a reunião. Não repita o dado que já foi dito.\n` : ""}
+O produto é o Atende+: atendimento que conversa como gente, 24 horas, agenda horários com a equipe e filtra quem está realmente interessado de quem só quer tirar dúvida.
+OBJETIVO: marcar uma reunião curta com o responsável (dia e horário). Não fale de site, de prévia nem de prints, e NUNCA use o marcador [MOSTRAR_PREVIA]. O site só aparece depois, na reunião, como serviço agregado.
+- Converse como pessoa: mensagens curtas, uma ideia por vez, sem parecer robô. Nunca finja ser cliente.
+- Use a dor real, com tato: vocês mesmos viram o robô responder e ninguém atender. Sem tom de acusação.
+- Se perguntarem se você é robô, não negue: você é a assistente de novos negócios da AW3S, e esta conversa é um exemplo de como o atendimento humanizado funciona.
+- Logo depois que a pessoa disser que pode apresentar a solução, ANTES de explicar, apresente-se formalmente, como uma pessoa faria: "Desculpa, não me apresentei direito: sou a Katia, consultora de novos negócios da AW3S." (com as suas palavras, curto). Só então explique a solução.
+- Sempre que sugerir ou confirmar a reunião, apresente o Sérgio como gerente de projetos da AW3S (ex.: "o Sérgio, nosso gerente de projetos, te mostra funcionando"). Para marcar, siga o passo a passo de "COMO MARCAR A REUNIÃO" abaixo.
+- Ao se despedir (reunião marcada, "vou pensar" ou até "não tenho interesse"), deixe sempre o site da AW3S para a pessoa conhecer quem somos: https://aw3s.com.br
+- Se não tiver interesse, agradeça com educação, deixe o site e não insista.
+- NUNCA informe preço, valor, faixa de preço nem forma de pagamento, nem se insistirem: diga com leveza que depende do volume de atendimentos de cada empresa e que o Sérgio mostra tudo na reunião.
+
+COMO MARCAR A REUNIÃO (siga esta ordem, uma etapa por mensagem):
+1. Pergunte a preferência: "Você prefere a reunião ainda hoje ou amanhã?"
+2. Consulte os HORÁRIOS LIVRES DE VERDADE (lista abaixo, quando houver) e sugira UM horário do dia escolhido ("Tenho às 15h, fica bom?"). Se não servir, ofereça outro da lista. Nunca invente horário fora da lista.
+3. Quando a pessoa escolher, peça o e-mail dela para mandar o convite, e avise: "Nossas reuniões são pelo Google Meet e levam no máximo 30 minutos."
+4. Com o horário e o e-mail confirmados, diga só "Perfeito, vou marcar aqui 😊" e, na MESMA resposta, em uma nova linha, escreva exatamente:
+   [AGENDAR: INÍCIO | FIM | Reunião AW3S: atendimento humanizado | EMAIL]
+   (INÍCIO = horário escolhido com -03:00, ex.: 2026-11-21T15:00:00-03:00; FIM = 30 min depois; EMAIL = o e-mail que a pessoa passou). Não diga que já está marcado: o sistema marca e manda a confirmação com o pedido para conferir se o convite chegou.
+5. Quando a pessoa confirmar que o convite chegou, agradeça, diga que o Sérgio, nosso gerente de projetos, estará na reunião, deixe o site https://aw3s.com.br e, na MESMA resposta, em uma nova linha, escreva [HANDOFF: reunião marcada]. Se o convite não chegou, peça para olhar o spam e confirmar o e-mail.
+${roteiro.trim() ? `\nRoteiro do Sérgio (siga este roteiro; ele vale mais que as regras gerais acima, menos a regra de não falar de site):\n"""\n${roteiro.trim()}\n"""` : ""}`;
+}
+
+export function instrucaoIsca(p: { textos: string[]; erro?: string | null }) {
+  if ((p.textos || [])[0] === MARCADOR_ATENDE) return instrucaoAtende(p.textos[1] || "", p.textos[2] || "", p.erro === "apresentou");
   return `
 
 ## Prospecção: há uma prévia de site pronta para este contato
@@ -284,10 +403,15 @@ export async function enviarReforco(companyId: string, userId: string, body: any
   if (!textosProsp.length) throw new ProspectError("não há isca enviada para este número nesta empresa", 409, "sem_isca");
   // saudação automática do WhatsApp Business (chega segundos depois da isca) não conta como resposta
   const t0 = new Date(msgs.find((m) => m.direcao === "saida" && m.autor === "prospeccao")?.created_at ?? 0).getTime();
-  if (msgs.some((m) => m.direcao === "entrada" && new Date(m.created_at).getTime() - t0 > JANELA_AUTOMATICA_MS && !pareceAutomatica(m.texto))) throw new ProspectError("o contato já respondeu: o reforço não é enviado", 409, "respondeu");
+  // Atende+ (máquina de vendas, 2026-11-20): tipo "atende" = 2º contato de atendimento humanizado, no dia seguinte, para quem
+  // tem robô de atendimento e nenhuma pessoa respondeu. A máquina já conferiu que não houve pessoa (regra de robô mais ampla),
+  // então aqui não se barra por "respondeu"; libera a partir de 12 h depois da abertura.
+  const atende = body?.tipo === "atende";
+  if (!atende && msgs.some((m) => m.direcao === "entrada" && new Date(m.created_at).getTime() - t0 > JANELA_AUTOMATICA_MS && !pareceAutomatica(m.texto))) throw new ProspectError("o contato já respondeu: o reforço não é enviado", 409, "respondeu");
   if (msgs.some((m) => m.direcao === "saida" && m.autor === "reforco")) throw new ProspectError("este contato já recebeu o reforço", 409, "ja_reforcado");
   const dias = (Date.now() - new Date(textosProsp[0].created_at).getTime()) / 864e5;
-  if (dias < MIN_DIAS_REFORCO) throw new ProspectError(`a isca foi enviada há menos de ${MIN_DIAS_REFORCO} dias`, 409, "cedo_demais");
+  const minDias = atende ? 0.5 : MIN_DIAS_REFORCO;
+  if (dias < minDias) throw new ProspectError(`a isca foi enviada há menos de ${minDias} dias`, 409, "cedo_demais");
 
   const { hoje, limite } = await checarLimite(admin, companyId, body, "reforco");
 
@@ -301,6 +425,14 @@ export async function enviarReforco(companyId: string, userId: string, body: any
     await evoSendText(inst.instance_name, numero, texto);
     await admin.from("mensagens").insert({ company_id: companyId, user_id: userId, numero, contato_nome: contatoNome, direcao: "saida", autor: "reforco", texto });
     if (i < textos.length - 1) await new Promise((r) => setTimeout(r, 1500 + Math.floor(Math.random() * 1500)));
+  }
+  // Atende+: a conversa daqui em diante é sobre atendimento humanizado (reunião), não sobre o site. Troca o material
+  // pendente da Katia pelo roteiro do Atende+ (sem prints); o instrucaoIsca reconhece o marcador [ATENDE+].
+  if (atende) {
+    const material = [MARCADOR_ATENDE, String(body?.instrucao || "").slice(0, 6000), textos.join("\n\n")];
+    const { data: pend } = await admin.from("prospeccao_pendente").select("id").eq("company_id", companyId).eq("numero", numero).maybeSingle();
+    if (pend) await admin.from("prospeccao_pendente").update({ textos: material, imagens: [], status: "pendente", erro: null }).eq("id", pend.id);
+    else await admin.from("prospeccao_pendente").insert({ company_id: companyId, numero, textos: material, imagens: [], ref_externa: body?.ref_externa ?? null, status: "pendente" });
   }
   const texto = textos[textos.length - 1];
   try {

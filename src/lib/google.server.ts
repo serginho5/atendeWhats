@@ -269,11 +269,18 @@ export async function updateUserPlanInMasterSheet(admin: any, data: { email: str
 
 // Cria evento no Google Agenda usando os tokens armazenados da empresa.
 // Refresca o access_token se expirou. Insere também na tabela agendamento.
+// convidado (máquina de vendas, 2026-11-20): e-mail do cliente → entra como participante e o Google manda o convite (sendUpdates=all)
 export async function createCalendarEventForCompany(
   admin: any,
   companyId: string,
-  data: { titulo: string; inicio: string; fim: string; descricao?: string; cardId?: string | null },
+  data: { titulo: string; inicio: string; fim: string; descricao?: string; cardId?: string | null; convidado?: string | null },
 ) {
+  const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
+  return criarEventoComToken(admin, companyId, accessToken, calendarId, data);
+}
+
+// Token de acesso da Google Agenda da empresa (renova se expirou)
+export async function acessoGoogleEmpresa(admin: any, companyId: string): Promise<{ accessToken: string; calendarId: string }> {
   const { data: gi } = await admin.from("google_integration").select("*").eq("company_id", companyId).maybeSingle();
   if (!gi?.conectado) throw new Error("Google Agenda não conectado");
 
@@ -299,8 +306,72 @@ export async function createCalendarEventForCompany(
     }
   }
 
-  const calendarId = gi.calendar_id || "primary";
+  return { accessToken, calendarId: gi.calendar_id || "primary" };
+}
 
+// Horários livres da agenda da empresa: blocos de `duracaoMin` dentro da janela (dias da semana + faixa de horas),
+// nos próximos `dias` dias corridos, a partir de agora + antecedência, tirando o que já está ocupado (freeBusy).
+export async function horariosLivresEmpresa(
+  admin: any,
+  companyId: string,
+  opts: { dias?: Set<number> | null; horaIni?: number | null; horaFim?: number | null; duracaoMin?: number; antecedenciaMin?: number; quantosDias?: number },
+): Promise<Array<{ inicio: string; fim: string; dia: string; hora: string }>> {
+  const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
+  const dur = (opts.duracaoMin || 30) * 60_000;
+  const ini = opts.horaIni ?? 9, fim = opts.horaFim ?? 18;
+  const agora = Date.now() + (opts.antecedenciaMin ?? 60) * 60_000;
+  const quantos = opts.quantosDias ?? 2;
+  // meia-noite de hoje em São Paulo (-03:00, sem horário de verão)
+  const hojeSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const base = new Date(`${hojeSP}T00:00:00-03:00`).getTime();
+  const fimBusca = base + (quantos + 7) * 864e5;
+  const fbRes = await fetchWithTimeout("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ timeMin: new Date(base).toISOString(), timeMax: new Date(fimBusca).toISOString(), timeZone: "America/Sao_Paulo", items: [{ id: calendarId }] }),
+  }, GOOGLE_TIMEOUT_MS);
+  if (!fbRes.ok) throw new Error(`Google freeBusy: ${fbRes.status}`);
+  const busy: Array<{ start: string; end: string }> = (await fbRes.json())?.calendars?.[calendarId]?.busy || [];
+  const ocupado = (a: number, b: number) => busy.some((x) => new Date(x.start).getTime() < b && new Date(x.end).getTime() > a);
+  const livres: Array<{ inicio: string; fim: string; dia: string; hora: string }> = [];
+  let diasComJanela = 0;
+  for (let d = 0; d < quantos + 7 && diasComJanela < quantos; d++) {
+    const dia0 = base + d * 864e5;
+    const semana = new Date(dia0 + 12 * 3600_000).getUTCDay(); // meio-dia SP ≈ 15h UTC: mesmo dia da semana
+    if (opts.dias && !opts.dias.has(semana)) continue;
+    diasComJanela++;
+    for (let t = dia0 + ini * 3600_000; t + dur <= dia0 + fim * 3600_000; t += dur) {
+      if (t < agora || ocupado(t, t + dur)) continue;
+      const iso = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "-03:00");
+      livres.push({
+        inicio: iso(t), fim: iso(t + dur),
+        dia: new Date(t).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit" }),
+        hora: new Date(t).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
+      });
+    }
+  }
+  return livres;
+}
+
+// Detalhes de um evento (link do Meet, convidados) para a tela de Reuniões da máquina de vendas
+export async function detalhesEventoEmpresa(admin: any, companyId: string, eventId: string) {
+  const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
+  const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }, GOOGLE_TIMEOUT_MS);
+  if (!res.ok) return null;
+  const ev = await res.json();
+  return {
+    meet: ev?.hangoutLink || ev?.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === "video")?.uri || null,
+    convidados: (ev?.attendees || []).filter((a: any) => !a.self).map((a: any) => ({ email: a.email, resposta: a.responseStatus })),
+    status: ev?.status || null, link: ev?.htmlLink || null, descricao: ev?.description || "",
+  };
+}
+
+async function criarEventoComToken(
+  admin: any, companyId: string, accessToken: string, calendarId: string,
+  data: { titulo: string; inicio: string; fim: string; descricao?: string; cardId?: string | null; convidado?: string | null },
+) {
   // Confere conflito de horário antes de criar (evita agendar em cima de outro evento).
   const fbRes = await fetchWithTimeout("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
@@ -318,6 +389,9 @@ export async function createCalendarEventForCompany(
   );
   // Gera link do Google Meet automaticamente para reuniões online
   url.searchParams.set("conferenceDataVersion", "1");
+  const convidado = String(data.convidado || "").trim().toLowerCase();
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(convidado);
+  if (emailOk) url.searchParams.set("sendUpdates", "all"); // o Google manda o convite por e-mail
   const res = await fetchWithTimeout(url.toString(), {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -326,6 +400,7 @@ export async function createCalendarEventForCompany(
       description: data.descricao || "",
       start: { dateTime: data.inicio, timeZone: "America/Sao_Paulo" },
       end: { dateTime: data.fim, timeZone: "America/Sao_Paulo" },
+      ...(emailOk ? { attendees: [{ email: convidado }] } : {}),
       reminders: { useDefault: true },
       conferenceData: {
         createRequest: {
@@ -351,5 +426,5 @@ export async function createCalendarEventForCompany(
     google_event_id: ev.id,
     status: "agendado",
   });
-  return { eventId: ev.id as string, meetLink, htmlLink: (ev.htmlLink as string) ?? null };
+  return { eventId: ev.id as string, meetLink, htmlLink: (ev.htmlLink as string) ?? null, convidado: emailOk ? convidado : null };
 }
