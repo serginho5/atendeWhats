@@ -67,6 +67,39 @@ async function handle(request: Request) {
 
   if (request.method === "POST") {
     const body = await request.json().catch(() => ({})) as any;
+    if (resource === "reunioes") {
+      // Tela de Reuniões da máquina de vendas (2026-11-20): marcar à mão (mesmo caminho da IA: janela, freeBusy, Meet,
+      // convite por e-mail) ou cancelar (o Google avisa o convidado).
+      const admin = supabaseAdmin as any;
+      try {
+        if (body.acao === "cancelar") {
+          const { data: ag } = await admin.from("agendamento").select("id, google_event_id").eq("company_id", companyId).eq("id", String(body.id || "")).maybeSingle();
+          if (!ag) return new Response(JSON.stringify({ error: "reunião não encontrada" }), { status: 404 });
+          const { cancelarEventoEmpresa } = await import("@/lib/google.server");
+          if (ag.google_event_id) await cancelarEventoEmpresa(admin, companyId, ag.google_event_id);
+          await admin.from("agendamento").update({ status: "cancelado" }).eq("id", ag.id);
+          return Response.json({ ok: true, cancelado: ag.id });
+        }
+        const inicio = String(body.inicio || "");
+        const ini = new Date(inicio);
+        if (isNaN(ini.getTime())) return new Response(JSON.stringify({ error: "inicio inválido (ex.: 2026-11-21T09:00:00-03:00)" }), { status: 400 });
+        const { data: cfg } = await admin.from("agent_config").select("horarios_disponiveis").eq("company_id", companyId).maybeSingle();
+        const { parseJanelaAgendamento, validaHorarioAgendamento } = await import("@/lib/ai-prompt");
+        const problema = validaHorarioAgendamento(inicio, parseJanelaAgendamento(cfg?.horarios_disponiveis));
+        if (problema) return new Response(JSON.stringify({ error: problema }), { status: 409 });
+        const fim = new Date(ini.getTime() + (Number(body.minutos) || 30) * 60_000);
+        const fimIso = new Date(fim.getTime() - 3 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "-03:00");
+        const { createCalendarEventForCompany } = await import("@/lib/google.server");
+        const ev = await createCalendarEventForCompany(admin, companyId, {
+          titulo: String(body.titulo || "Reunião AW3S: atendimento humanizado").slice(0, 120), inicio, fim: fimIso,
+          descricao: String(body.descricao || "Marcada pela tela de Reuniões da máquina de vendas").slice(0, 500), convidado: body.email || null,
+        });
+        return Response.json({ ok: true, ...ev });
+      } catch (e: any) {
+        const ocupado = e?.message === "SLOT_OCUPADO";
+        return new Response(JSON.stringify({ error: ocupado ? "esse horário já está ocupado na agenda" : String(e?.message ?? e) }), { status: ocupado ? 409 : 500 });
+      }
+    }
     if (resource === "checknumbers") {
       // Confere quais números têm WhatsApp (sem enviar mensagem)
       const { conferirNumeros, ProspectError } = await import("@/lib/prospect.server");

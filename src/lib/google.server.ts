@@ -354,6 +354,15 @@ export async function horariosLivresEmpresa(
   return livres;
 }
 
+// Cancela um evento da agenda da empresa e avisa os convidados (tela de Reuniões da máquina de vendas)
+export async function cancelarEventoEmpresa(admin: any, companyId: string, eventId: string) {
+  const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
+  const res = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` },
+  }, GOOGLE_TIMEOUT_MS);
+  if (!res.ok && res.status !== 410 && res.status !== 404) throw new Error(`Google API: ${res.status}`);
+}
+
 // Detalhes de um evento (link do Meet, convidados) para a tela de Reuniões da máquina de vendas
 export async function detalhesEventoEmpresa(admin: any, companyId: string, eventId: string) {
   const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
