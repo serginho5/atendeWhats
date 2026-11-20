@@ -356,22 +356,57 @@ const DIAS_SEMANA: Record<string, number> = {
   domingo: 0, segunda: 1, terça: 2, terca: 2, quarta: 3, quinta: 4, sexta: 5, sábado: 6, sabado: 6,
 };
 
-export interface JanelaAgendamento { dias: Set<number> | null; horaIni: number | null; horaFim: number | null }
+// porDia (2026-11-20): faixa de horário de cada dia da semana, quando o texto tem trechos diferentes
+// (ex.: "segunda a sexta das 08:00 as 17:00 e sabado das 08:00 as 12:00").
+export interface JanelaAgendamento { dias: Set<number> | null; horaIni: number | null; horaFim: number | null; porDia?: Map<number, [number, number]> | null }
+
+const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const DIA_ABREV: Record<string, number> = { dom: 0, seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6 };
+// Dias citados num trecho: nomes soltos ("segunda, quarta") e intervalos ("segunda a sexta", "seg-sex", "segunda até sexta")
+function diasDoTrecho(trecho: string): Set<number> {
+  const dias = new Set<number>();
+  const NOME = "\\b(dom|seg|ter|qua|qui|sex|sab)(?:ingo|unda|ca|rta|nta|ta|ado)?s?\\b(?:-feira)?s?";
+  const intervalo = new RegExp(`${NOME}\\s*(?:a|ate|-|ao)\\s*${NOME}`, "g");
+  let resto = trecho;
+  for (const m of trecho.matchAll(intervalo)) {
+    const a = DIA_ABREV[m[1]], b = DIA_ABREV[m[2]];
+    for (let d = a; ; d = (d + 1) % 7) { dias.add(d); if (d === b) break; }
+    resto = resto.replace(m[0], " ");
+  }
+  for (const m of resto.matchAll(new RegExp(NOME, "g"))) dias.add(DIA_ABREV[m[1]]);
+  return dias;
+}
 
 // Extrai dias da semana e faixa de horário de um texto livre tipo
-// "todas as segundas das 9:00 as 17:00". Sem tentar ser um parser perfeito —
-// se não encontrar nada reconhecível, não restringe (fallback permissivo).
+// "segunda a sexta das 08:00 as 17:00 e sabado das 08:00 as 12:00" ou "todas as segundas das 9h às 17h".
+// Cada faixa de horário vale para os dias citados antes dela (desde a faixa anterior); faixa sem dia vale para todos.
+// Se não encontrar nada reconhecível, não restringe (fallback permissivo).
 export function parseJanelaAgendamento(texto?: string | null): JanelaAgendamento {
-  const t = (texto || "").toLowerCase();
-  const dias = new Set<number>();
-  for (const [nome, num] of Object.entries(DIAS_SEMANA)) {
-    if (t.includes(nome)) dias.add(num);
+  const t = semAcento(texto || "");
+  const hora = (h: string, m?: string) => Number(h) + (m ? Number(m) / 60 : 0);
+  const faixas = [...t.matchAll(/(\d{1,2})(?:[:h](\d{2}))?\s*h?\s*(?:as|a|ate|-)\s*(\d{1,2})(?:[:h](\d{2}))?/g)];
+  const porDia = new Map<number, [number, number]>();
+  let inicioTrecho = 0;
+  for (const f of faixas) {
+    const ini = hora(f[1], f[2]), fim = hora(f[3], f[4]);
+    if (!(fim > ini)) { inicioTrecho = (f.index ?? 0) + f[0].length; continue; }
+    let dias = diasDoTrecho(t.slice(inicioTrecho, f.index));
+    if (!dias.size) dias = new Set([0, 1, 2, 3, 4, 5, 6]);
+    for (const d of dias) porDia.set(d, [ini, fim]);
+    inicioTrecho = (f.index ?? 0) + f[0].length;
   }
-  const horas = [...t.matchAll(/(\d{1,2})[:h](\d{2})?/g)].map((m) => Number(m[1]) + (m[2] ? Number(m[2]) / 60 : 0));
+  if (porDia.size) {
+    const faixasTodas = [...porDia.values()];
+    return { dias: new Set(porDia.keys()), horaIni: Math.min(...faixasTodas.map((x) => x[0])), horaFim: Math.max(...faixasTodas.map((x) => x[1])), porDia };
+  }
+  // sem faixa "das X às Y": comportamento antigo (dias citados + menor e maior hora)
+  const dias = diasDoTrecho(t);
+  const horas = [...t.matchAll(/(\d{1,2})[:h](\d{2})?/g)].map((m) => hora(m[1], m[2]));
   return {
     dias: dias.size ? dias : null,
     horaIni: horas.length ? Math.min(...horas) : null,
     horaFim: horas.length ? Math.max(...horas) : null,
+    porDia: null,
   };
 }
 
@@ -390,8 +425,10 @@ export function validaHorarioAgendamento(inicioISO: string, janela: JanelaAgenda
   const horaDecimal = hour + minute / 60;
 
   if (janela.dias && !janela.dias.has(weekday)) return "Esse dia não está no nosso período de agendamento.";
-  if (janela.horaIni != null && horaDecimal < janela.horaIni) return "Esse horário é antes do início do nosso período de atendimento.";
-  if (janela.horaFim != null && horaDecimal >= janela.horaFim) return "Esse horário é depois do fim do nosso período de atendimento.";
+  const faixa = janela.porDia?.get(weekday);
+  const ini = faixa ? faixa[0] : janela.horaIni, fim = faixa ? faixa[1] : janela.horaFim;
+  if (ini != null && horaDecimal < ini) return "Esse horário é antes do início do nosso período de atendimento.";
+  if (fim != null && horaDecimal >= fim) return "Esse horário é depois do fim do nosso período de atendimento.";
   return null;
 }
 

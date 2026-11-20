@@ -314,7 +314,7 @@ export async function acessoGoogleEmpresa(admin: any, companyId: string): Promis
 export async function horariosLivresEmpresa(
   admin: any,
   companyId: string,
-  opts: { dias?: Set<number> | null; horaIni?: number | null; horaFim?: number | null; duracaoMin?: number; antecedenciaMin?: number; quantosDias?: number },
+  opts: { dias?: Set<number> | null; horaIni?: number | null; horaFim?: number | null; porDia?: Map<number, [number, number]> | null; duracaoMin?: number; antecedenciaMin?: number; quantosDias?: number },
 ): Promise<Array<{ inicio: string; fim: string; dia: string; hora: string }>> {
   const { accessToken, calendarId } = await acessoGoogleEmpresa(admin, companyId);
   const dur = (opts.duracaoMin || 30) * 60_000;
@@ -340,7 +340,8 @@ export async function horariosLivresEmpresa(
     const semana = new Date(dia0 + 12 * 3600_000).getUTCDay(); // meio-dia SP ≈ 15h UTC: mesmo dia da semana
     if (opts.dias && !opts.dias.has(semana)) continue;
     diasComJanela++;
-    for (let t = dia0 + ini * 3600_000; t + dur <= dia0 + fim * 3600_000; t += dur) {
+    const [hIni, hFim] = opts.porDia?.get(semana) ?? [ini, fim]; // faixa própria do dia (ex.: sábado só de manhã)
+    for (let t = dia0 + hIni * 3600_000; t + dur <= dia0 + hFim * 3600_000; t += dur) {
       if (t < agora || ocupado(t, t + dur)) continue;
       const iso = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "-03:00");
       livres.push({
