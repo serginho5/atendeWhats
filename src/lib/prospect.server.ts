@@ -213,12 +213,21 @@ export async function buscarIscaPendente(companyId: string, numero: string, text
       .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente");
     return null;
   }
-  const { data } = await admin.from("prospeccao_pendente").select("id, textos, ref_externa, erro")
-    .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente").maybeSingle();
-  return (data as { id: string; textos: string[]; ref_externa: string | null; erro?: string | null } | null) ?? null;
+  const { data } = await admin.from("prospeccao_pendente").select("id, textos, ref_externa, erro, status, entregue_em")
+    .eq("company_id", companyId).eq("numero", numero).in("status", ["pendente", "entregue"]).maybeSingle();
+  // Prints já entregues (2026-11-20): a Katia continua com o contexto da prospecção por 7 dias (reagir à prévia, chamar para a completa)
+  if (data?.status === "entregue" && (!data.entregue_em || Date.now() - new Date(data.entregue_em).getTime() > 7 * 864e5)) return null;
+  return (data as { id: string; textos: string[]; ref_externa: string | null; erro?: string | null; status?: string } | null) ?? null;
 }
 
 export const MARCADOR_ATENDE = "[ATENDE+]";
+// Seguimento logo depois dos prints do site (texto do Sérgio, 2026-11-20)
+export const TEXTO_DEPOIS_DOS_PRINTS = [
+  "Tomei a liberdade de pedir para o time de designers construir esse modelo inicial de site para vocês.",
+  "O que achou? Ficou do seu agrado?",
+  "É uma prévia, é claro. Se interessar, podemos desenvolver o site todo, que irá agregar muito à autoridade que vocês já têm hoje.",
+];
+const TEXTO_DEPOIS_RESUMO = TEXTO_DEPOIS_DOS_PRINTS.map((t) => `"${t}"`).join(" / ");
 
 // ---- Robô de atendimento → trilha Atende+ no mesmo dia (usuário, 2026-11-20) ----
 // 1. O robô do contato respondeu à abertura: a Katia pede, UMA vez e ~75 s depois, para falar com uma pessoa. Isso chama a
@@ -237,14 +246,32 @@ const tempoDesde = (iso: string) => {
   const d = Math.round(h / 24);
   return `${d} dias`;
 };
-const primeiroNome = (n?: string | null) => {
-  const p = String(n || "").replace(/[^\p{L}\s'-]/gu, " ").trim().split(/\s+/)[0] || "";
+// Perfil do WhatsApp com nome comercial (caso Abrakadabra, 2026-11-21: "Buffet Abrakadabra" virou "Olá, tudo bem, Buffet?").
+// Só usa o primeiro nome quando o perfil parece de pessoa.
+const NOME_EMPRESA = /buffet|festa|evento|sal[aã]o|kids|infantil|espa[cç]o|ltda|eireli|\bme\b|oficial|loja|cl[ií]nica|studio|est[uú]dio|atendimento|comercial|marmor|granito|decora|est[eé]tica|consult|servi[cç]o|restaurante|pizzaria|bar\b|caf[eé]|ateli[eê]|brech[oó]|academia|\bpet\b|odonto|advoca|imobili|grupo|empresa|center|centro|\bcasa\b|\bbar\b|games?\b|divers|brinquedo|beleza|sorocaba|recep[cç]|\d/i;
+export const primeiroNome = (n?: string | null) => {
+  const s = String(n || "");
+  if (NOME_EMPRESA.test(s)) return "";
+  const p = s.replace(/[^\p{L}\s'-]/gu, " ").trim().split(/\s+/)[0] || "";
   return p.length >= 2 ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : "";
 };
-export function textoApresentarDado(nome: string, tempo: string) {
+const saudacaoSP = () => {
+  const h = Number(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false })) % 24;
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+};
+// A pessoa achou que a Katia é cliente (caso Abrakadabra: "Claro! Para quando é a festa?")
+const ACHOU_CLIENTE = /para quando|qual (a )?(data|dia)|quantas (pessoas|crian[cç]as|convidados)|or[cç]amento|como (posso|podemos) (te |lhe )?ajudar|em que (posso|podemos)|o que (voc[eê] )?(precisa|gostaria|deseja)|qual servi[cç]o|festa|evento|agendar|hor[aá]rio/i;
+// Texto do Sérgio (2026-11-20) + fecho com a oferta (aprovado em 2026-11-21): a sequência não pode terminar na pergunta da dor,
+// porque ninguém responde a ela e a conversa morre (caso Abrakadabra).
+export function textoApresentarDado(nome: string, tempo: string, recebido = "") {
+  const dado = `Tenho um dado importante para te apresentar: meu primeiro contato com vocês foi há ${tempo}, e o sistema robotizado não me causou interesse em interagir com ele.`;
+  const confusao = ACHOU_CLIENTE.test(recebido || "")
+    ? (/festa/i.test(recebido) ? "Na verdade não estou organizando uma festa, desculpa a confusão 😊" : "Na verdade não sou cliente, desculpa a confusão 😊")
+    : "";
   return [
-    `Olá, tudo bem${nome ? `, ${nome}` : ""}? Tenho um dado importante para te apresentar: meu primeiro contato com vocês foi há ${tempo}, e o sistema robotizado não me causou interesse em interagir com ele.`,
-    "Já imaginou quantos clientes encontram vocês no Google, caem no WhatsApp de vocês e desistem de contratar os seus serviços por se depararem com um robô?",
+    ...(confusao ? [`${saudacaoSP()}${nome ? `, ${nome}` : ""}! ${confusao}`, dado] : [`Olá, tudo bem${nome ? `, ${nome}` : ""}? ${dado}`]),
+    "Já imaginou quantos clientes encontram vocês no Google, caem no WhatsApp de vocês e desistem de contratar por se depararem com um robô?",
+    "Aqui na AW3S a gente resolve exatamente isso: um atendimento que conversa como gente, 24 horas, responde na hora e já agenda com a equipe de vocês. Posso te apresentar como funciona?",
   ];
 }
 
@@ -287,7 +314,7 @@ export async function pedirPessoa(companyId: string, userId: string, instanceNam
 
 // Chamado pelo webhook quando uma PESSOA responde numa conversa da trilha Atende+ que ainda não recebeu o dado.
 // Envia o texto fixo do Sérgio e devolve true (o webhook não chama a IA nesta mensagem).
-export async function apresentarDado(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null, pend: { id: string; textos: string[]; erro?: string | null }) {
+export async function apresentarDado(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null, pend: { id: string; textos: string[]; erro?: string | null }, recebido = "") {
   if ((pend.textos || [])[0] !== MARCADOR_ATENDE || pend.erro !== "pediu_pessoa") return false;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const admin = supabaseAdmin as any;
@@ -295,7 +322,7 @@ export async function apresentarDado(companyId: string, userId: string, instance
   if (!travou?.length) return false;
   const { data: primeira } = await admin.from("mensagens").select("created_at").eq("company_id", companyId).eq("numero", numero)
     .eq("direcao", "saida").eq("autor", "prospeccao").order("created_at", { ascending: true }).limit(1).maybeSingle();
-  const textos = textoApresentarDado(primeiroNome(contatoNome), tempoDesde(primeira?.created_at || new Date().toISOString()));
+  const textos = textoApresentarDado(primeiroNome(contatoNome), tempoDesde(primeira?.created_at || new Date().toISOString()), recebido);
   await admin.from("prospeccao_pendente").update({ textos: [MARCADOR_ATENDE, pend.textos?.[1] || "", textos.join("\n\n")] }).eq("id", pend.id);
   await enviarComoKatia(companyId, userId, instanceName, numero, contatoNome, textos, "ia");
   return true;
@@ -313,7 +340,11 @@ Quem respondeu à nossa abertura foi um robô de atendimento automático deste c
 """
 ${enviado}
 """
-${apresentou ? `PRÓXIMO PASSO (a cartada): reaja ao que a pessoa disse em UMA frase curta e faça a pergunta rápida e objetiva "Posso te apresentar uma solução?". Só depois do "sim" explique a solução em poucas linhas e proponha a reunião. Não repita o dado que já foi dito.\n` : ""}
+${apresentou ? `Essa mensagem já terminou oferecendo a solução ("Posso te apresentar como funciona?"). PRÓXIMO PASSO:
+- Se a pessoa disse sim, quer saber mais ou perguntou como funciona: apresente-se formalmente (regra abaixo), explique a solução em poucas linhas e já proponha a reunião (passo 1 de COMO MARCAR A REUNIÃO).
+- Se ela reagiu à dor ("é verdade", "perdemos sim", "o robô é só fora do horário"…): concorde ou acolha em UMA frase curta, sem discutir, e siga para a solução e a reunião do mesmo jeito.
+- Se ela ainda achar que você é cliente, desfaça a confusão em uma frase e siga.
+- Não repita o dado nem a pergunta da dor, e não pergunte de novo se pode apresentar. Nunca termine a conversa parada: toda resposta sua avança um passo rumo à reunião.\n` : ""}
 O produto é o Atende+: atendimento que conversa como gente, 24 horas, agenda horários com a equipe e filtra quem está realmente interessado de quem só quer tirar dúvida.
 OBJETIVO: marcar uma reunião curta com o responsável (dia e horário). Não fale de site, de prévia nem de prints, e NUNCA use o marcador [MOSTRAR_PREVIA]. O site só aparece depois, na reunião, como serviço agregado.
 - Converse como pessoa: mensagens curtas, uma ideia por vez, sem parecer robô. Nunca finja ser cliente.
@@ -336,8 +367,21 @@ COMO MARCAR A REUNIÃO (siga esta ordem, uma etapa por mensagem):
 ${roteiro.trim() ? `\nRoteiro do Sérgio (siga este roteiro; ele vale mais que as regras gerais acima, menos a regra de não falar de site):\n"""\n${roteiro.trim()}\n"""` : ""}`;
 }
 
-export function instrucaoIsca(p: { textos: string[]; erro?: string | null }) {
+export function instrucaoIsca(p: { textos: string[]; erro?: string | null; status?: string }) {
   if ((p.textos || [])[0] === MARCADOR_ATENDE) return instrucaoAtende(p.textos[1] || "", p.textos[2] || "", p.erro === "apresentou");
+  if (p.status === "entregue") return `
+
+## Prospecção: os prints do site JÁ foram enviados para este contato
+O time da AW3S criou um modelo inicial de site para a empresa dele, e os prints já foram enviados nesta conversa, seguidos de: ${TEXTO_DEPOIS_RESUMO}. Ou seja, você já perguntou o que ele achou e já ofereceu desenvolver o site todo.
+Material REAL desta prospecção (use à vontade, com as suas palavras; não invente nada além disso):
+"""
+${(p.textos || []).join("\n\n")}
+"""
+Como conduzir agora:
+- Reaja ao que ele disse sobre a prévia (elogio, dúvida ou crítica), curto e como uma pessoa. Não reenvie os prints e NÃO use o marcador [MOSTRAR_PREVIA].
+- Convide-o a responder SIM para receber a versão completa e navegar pelo celular.
+- Responda dúvidas e objeções com calma. NUNCA informe preço: diga que o Sérgio, nosso gerente de projetos, apresenta os valores.
+- Se ele quiser fechar, falar de preço ou com uma pessoa, passe para o Sérgio. Se não tiver interesse, agradeça e não insista.`;
   return `
 
 ## Prospecção: há uma prévia de site pronta para este contato
@@ -352,7 +396,8 @@ Como conduzir:
 - Se quem respondeu for funcionário(a) ou secretária, seja simpática, diga em 1 ou 2 frases quem você é e por que escreveu, e ofereça mostrar a prévia para ele(a) repassar ao responsável.
 - Converse de forma natural e curta, como uma pessoa. Responda dúvidas e objeções com calma ("quem é você?", "quanto custa?", "não tenho tempo", "já tenho site"…), sempre puxando para mostrar a prévia: é ela que gera o interesse.
 - Quando o contato topar ver, mostrar curiosidade ou for o momento natural, escreva uma frase curta apresentando a prévia e coloque no FINAL da resposta o marcador [MOSTRAR_PREVIA]. O sistema envia os prints do site logo depois da sua mensagem. Use o marcador uma única vez e não diga que "vai enviar imagens" sem usá-lo.
-- Depois dos prints, convide-o a responder SIM para receber a versão completa e navegar pelo celular.
+- Na mensagem que leva o [MOSTRAR_PREVIA], só apresente a prévia em uma frase curta; NÃO pergunte o que ele achou. Logo depois dos prints o sistema manda sozinho: ${TEXTO_DEPOIS_RESUMO}.
+- Quando ele responder sobre a prévia, reaja ao que ele disse (elogio, dúvida ou crítica) e convide-o a responder SIM para receber a versão completa e navegar pelo celular.
 - Se ele disser que não tem interesse, agradeça com educação e não insista.`;
 }
 
@@ -374,6 +419,12 @@ export async function enviarPrintsPendentes(companyId: string, userId: string, i
       });
     }
     await admin.from("prospeccao_pendente").update({ status: "entregue", entregue_em: new Date().toISOString(), imagens: [] }).eq("id", p.id);
+    // Depois dos prints a Katia puxa a conversa (usuário, 2026-11-20): o cliente fica esperando uma definição.
+    // Texto fixo, sem IA, ~3 s depois da última imagem.
+    try {
+      await new Promise((r) => setTimeout(r, 2500 + Math.floor(Math.random() * 1500)));
+      await enviarComoKatia(companyId, userId, instanceName, numero, contatoNome, TEXTO_DEPOIS_DOS_PRINTS, "ia");
+    } catch (e: any) { console.error("[isca] seguimento depois dos prints", e?.message); }
     try {
       const { emitWebhook } = await import("@/lib/webhooks.server");
       void emitWebhook(companyId, "message.sent", { numero, origem: "isca_entregue", ref_externa: p.ref_externa ?? null });

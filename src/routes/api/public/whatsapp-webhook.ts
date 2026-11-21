@@ -28,7 +28,30 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const remoteJid: string = key.remoteJid || "";
           if (!remoteJid) return new Response("no jid", { status: 200 });
           if (remoteJid.endsWith("@g.us")) return new Response("group", { status: 200 });
-          if (fromMe) return new Response("fromMe", { status: 200 });
+          if (fromMe) {
+            // Mensagem digitada no próprio celular do número (2026-11-20, casos Dukids e Mania Games): grava no histórico
+            // como "humano" para a IA saber que alguém assumiu. O que o próprio sistema enviou também volta como fromMe:
+            // se já existe uma saída igual há menos de 3 min, não grava de novo.
+            try {
+              const m = data?.message ?? {};
+              const t = String(m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || "").trim();
+              const numero = remoteJid.split("@")[0];
+              if (t && /^\d{10,15}$/.test(numero)) {
+                const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+                const admin = supabaseAdmin as any;
+                const { data: inst } = await admin.from("whatsapp_instances").select("company_id, user_id, webhook_token").eq("instance_name", instanceName).maybeSingle();
+                const tok = new URL(request.url).searchParams.get("t") || request.headers.get("x-webhook-token") || "";
+                if (inst?.company_id && tok && tok === inst.webhook_token) { // mesmo token do resto do webhook
+                  const { data: igual } = await admin.from("mensagens").select("id").eq("company_id", inst.company_id).eq("numero", numero)
+                    .eq("direcao", "saida").eq("texto", t).gte("created_at", new Date(Date.now() - 3 * 60_000).toISOString()).limit(1);
+                  if (!igual?.length) {
+                    await admin.from("mensagens").insert({ company_id: inst.company_id, user_id: inst.user_id ?? null, numero, direcao: "saida", autor: "humano", texto: t });
+                  }
+                }
+              }
+            } catch (e: any) { console.error("[fromMe]", e?.message); }
+            return new Response("fromMe", { status: 200 });
+          }
 
           const number = remoteJid.split("@")[0];
           const pushName: string | undefined = data?.pushName;
@@ -319,9 +342,25 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               try { await pedirPessoa(companyId, userId, instanceName, number, pushName ?? null); } catch (e: any) { console.error("[atende+ pedir pessoa]", e?.message); }
               return new Response("auto-reply", { status: 200 });
             }
+            // Prospecção que o Sérgio assumiu (mensagem "humano" nas últimas 6 h, inclusive digitada no celular): a IA não
+            // entra por cima (caso Mania Games, 2026-11-20). Vale só para contatos de prospecção (com ou sem o 9).
+            {
+              const fim8 = number.slice(-8);
+              const desde = new Date(Date.now() - 6 * 3600_000).toISOString();
+              const [{ data: hum }, { data: prosp }] = await Promise.all([
+                (supabaseAdmin as any).from("mensagens").select("id").eq("company_id", companyId).like("numero", `%${fim8}`)
+                  .eq("direcao", "saida").eq("autor", "humano").gte("created_at", desde).limit(1),
+                (supabaseAdmin as any).from("mensagens").select("id").eq("company_id", companyId).like("numero", `%${fim8}`)
+                  .eq("autor", "prospeccao").limit(1),
+              ]);
+              if (hum?.length && prosp?.length) {
+                await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+                return new Response("human-active-prospect", { status: 200 });
+              }
+            }
             iscaPendente = await buscarIscaPendente(companyId, number, text);
             // Uma pessoa respondeu depois do pedido: sai o texto fixo com o dado real (sem IA nesta mensagem)
-            if (iscaPendente && await apresentarDado(companyId, userId, instanceName, number, pushName ?? null, iscaPendente)) {
+            if (iscaPendente && await apresentarDado(companyId, userId, instanceName, number, pushName ?? null, iscaPendente, text)) {
               await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
               return new Response("atende-dado", { status: 200 });
             }
