@@ -105,7 +105,8 @@ async function geminiChat(key: string, model: string, messages: ChatMsg[]): Prom
       lastErr = e;
       const msg = String(e?.message || "");
       // Só troca de modelo em erro de capacidade/tempo; erro de requisição não melhora trocando.
-      if (!/ 50[0-9]|429|Limite|timeout|abort|indispon|Tempo esgotado/i.test(msg)) throw e;
+      // 404 = modelo aposentado pelo Google (ex.: preview que saiu do ar): cai no próximo da lista em vez de ficar sem resposta
+      if (!/ 50[0-9]| 404|no longer available|429|Limite|timeout|abort|indispon|Tempo esgotado/i.test(msg)) throw e;
       console.warn(`[ai] ${modelId} falhou (${msg.slice(0, 80)}), tentando o próximo`);
     }
   }

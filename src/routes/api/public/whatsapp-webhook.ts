@@ -384,10 +384,10 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             googleConectado: !!googleIntegration?.conectado,
           });
           if (iscaPendente) {
-            const { instrucaoIsca, MARCADOR_ATENDE } = await import("@/lib/prospect.server");
+            const { instrucaoIsca } = await import("@/lib/prospect.server");
             system += instrucaoIsca(iscaPendente);
-            // Trilha Atende+ (2026-11-20): a Katia consulta a agenda de verdade antes de sugerir horário de reunião
-            if ((iscaPendente.textos || [])[0] === MARCADOR_ATENDE && googleIntegration?.conectado) {
+            // Trilhas Atende+ (2026-11-20) e site (2026-11-21): a Katia consulta a agenda de verdade antes de sugerir horário de reunião
+            if (googleIntegration?.conectado) {
               try {
                 const { parseJanelaAgendamento } = await import("@/lib/ai-prompt");
                 const { horariosLivresEmpresa } = await import("@/lib/google.server");
