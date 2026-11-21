@@ -294,9 +294,10 @@ export async function pedirPessoa(companyId: string, userId: string, instanceNam
   const admin = supabaseAdmin as any;
   const { data: pend } = await admin.from("prospeccao_pendente").select("id, textos, erro")
     .eq("company_id", companyId).eq("numero", numero).eq("status", "pendente").maybeSingle();
+  const angulo = (pend?.textos || []).find((t: string) => ANGULO.test(t || "")) || "";
   if (!pend || pend.erro) return false; // sem prospecção pendente, ou já pediu / já está na trilha Atende+
   const { data: travou } = await admin.from("prospeccao_pendente")
-    .update({ erro: "pediu_pessoa", textos: [MARCADOR_ATENDE, "", MENSAGEM_PEDIR_PESSOA], imagens: [] })
+    .update({ erro: "pediu_pessoa", textos: [MARCADOR_ATENDE, angulo, MENSAGEM_PEDIR_PESSOA], imagens: [] })
     .eq("id", pend.id).is("erro", null).select("id");
   if (!travou?.length) return false;
   setTimeout(async () => {
@@ -357,7 +358,15 @@ OBJETIVO: marcar uma reunião curta com o responsável (dia e horário). Não fa
 - NUNCA informe preço, valor, faixa de preço nem forma de pagamento, nem se insistirem: diga com leveza que depende do volume de atendimentos de cada empresa e que o Sérgio mostra tudo na reunião.
 
 ${comoMarcar("Reunião AW3S: atendimento humanizado")}
-${roteiro.trim() ? `\nRoteiro do Sérgio (siga este roteiro; ele vale mais que as regras gerais acima, menos a regra de não falar de site):\n"""\n${roteiro.trim()}\n"""` : ""}`;
+${blocoAngulo([roteiro])}${roteiro.trim() && !ANGULO.test(roteiro) ? `\nRoteiro do Sérgio (siga este roteiro; ele vale mais que as regras gerais acima, menos a regra de não falar de site):\n"""\n${roteiro.trim()}\n"""` : ""}`;
+}
+
+// Ângulo do momento do nicho (máquina de vendas, 2026-11-21): vem no material da isca com o prefixo [ÂNGULO].
+const ANGULO = /^\s*\[\s*[ÂA]NGULO\s*\]/i;
+const materialSemAngulo = (textos?: string[]) => (textos || []).filter((t) => !ANGULO.test(t || "")).join("\n\n");
+function blocoAngulo(textos?: string[]) {
+  const a = (textos || []).find((t) => ANGULO.test(t || ""));
+  return a ? `\n\nÂNGULO DO MOMENTO PARA ESTE NICHO (use com as suas palavras, no momento certo da conversa, para dar urgência e motivo ao convite):\n"""\n${a.replace(ANGULO, "").trim()}\n"""` : "";
 }
 
 // Passo a passo da reunião, comum às duas trilhas (Atende+ e site)
@@ -407,8 +416,8 @@ function instrucaoIscaBase(p: { textos: string[]; erro?: string | null; status?:
 O time da AW3S criou um modelo inicial de site para a empresa dele, e os prints já foram enviados nesta conversa, seguidos de: ${TEXTO_DEPOIS_RESUMO}. Ou seja, você já perguntou o que ele achou e já ofereceu desenvolver o site todo.
 Material REAL desta prospecção (use à vontade, com as suas palavras; não invente nada além disso):
 """
-${(p.textos || []).join("\n\n")}
-"""
+${materialSemAngulo(p.textos)}
+"""${blocoAngulo(p.textos)}
 Como conduzir agora:
 - Reaja ao que ele disse sobre a prévia (elogio, dúvida ou crítica), curto e como uma pessoa, e na MESMA resposta convide para a reunião de apresentação do site completo. Não reenvie os prints e NÃO use o marcador [MOSTRAR_PREVIA].
 - Responda dúvidas e objeções com calma, sempre voltando ao convite para a reunião.
@@ -421,8 +430,8 @@ ${REUNIAO_SITE}`;
 Você (ou a empresa) mandou a mensagem de abertura para este contato, e ele respondeu. O time da AW3S já criou um modelo exclusivo de site para a empresa dele, e os prints estão prontos para enviar.
 Material REAL desta prospecção (use à vontade, com as suas palavras; não invente nada além disso):
 """
-${(p.textos || []).join("\n\n")}
-"""
+${materialSemAngulo(p.textos)}
+"""${blocoAngulo(p.textos)}
 Como conduzir:
 - ATENÇÃO: o contato ainda NÃO recebeu nenhuma imagem. A abertura foi só: "Bom dia, tudo bem com você? Aqui é a Katia, encontrei vocês no Google. Como está a agenda de vocês? Estão abertos a novos clientes?" (ou, 3 dias depois, "Vocês ainda estão aceitando novos clientes?"). Não pergunte se ele "viu a demonstração/prévia" nem fale de imagens "acima" ou "que mandei".
 - O contato pode achar que você é uma CLIENTE querendo agendar ou fazer orçamento. NUNCA finja ser cliente, não peça horário, preço nem serviço. Já na sua PRIMEIRA resposta, agradeça o retorno e conte com transparência e leveza por que perguntou, ligando com o que ele respondeu. Tom acolhedor, de quem quer ver a empresa crescer e ganhar mais dinheiro, nunca de vendedor insistente. Exemplo (siga esta forma): se disse que está aberto a clientes → "Que bom! 😊 Te perguntei porque eu ajudo empresas aqui da região a atrair mais clientes pelo Google. Vi que a [empresa] tem ótimas avaliações e está fazendo um trabalho excelente no seu segmento. Posso te ajudar a fortalecer ainda mais a autoridade de vocês e trazer muito mais clientes?". Use a nota e o número de avaliações reais do material quando houver. Quando ele topar, conte que você já montou um rascunho de site para a empresa e mostre ([MOSTRAR_PREVIA]). Se disse que a agenda está cheia → elogie e diga que um site ajuda a selecionar melhores clientes e valorizar o preço. Se perguntou "o que você precisa?" → explique sem rodeio que não é para agendar, é uma ideia para trazer mais clientes. Peça desculpas pela confusão se ele parecer frustrado.
