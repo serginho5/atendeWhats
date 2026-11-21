@@ -372,7 +372,7 @@ function blocoAngulo(textos?: string[]) {
 // Passo a passo da reunião, comum às duas trilhas (Atende+ e site)
 function comoMarcar(titulo: string) {
   return `COMO MARCAR A REUNIÃO (siga esta ordem, uma etapa por mensagem):
-1. Pergunte a preferência: "Você prefere a reunião ainda hoje ou amanhã?"
+1. Pergunte a preferência entre os DOIS PRÓXIMOS DIAS que têm horário na lista de HORÁRIOS LIVRES abaixo: "Você prefere hoje ou amanhã?" num dia útil; no fim de semana ou depois do expediente, use os dias da lista (ex.: "Você prefere segunda ou terça?"). Nunca ofereça um dia sem horário livre.
 2. Consulte os HORÁRIOS LIVRES DE VERDADE (lista abaixo, quando houver) e sugira UM horário do dia escolhido ("Tenho às 15h, fica bom?"). Se não servir, ofereça outro da lista. Nunca invente horário fora da lista.
 3. Quando a pessoa escolher, peça o e-mail dela para mandar o convite, e avise: "Nossas reuniões são pelo Google Meet e levam no máximo 30 minutos."
 4. Com o horário e o e-mail confirmados, diga só "Perfeito, vou marcar aqui 😊" e, na MESMA resposta, em uma nova linha, escreva exatamente:
