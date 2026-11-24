@@ -30,6 +30,7 @@ function shell(title: string, bodyHtml: string, rodape?: string) {
           <tr>
             <td style="padding:20px 32px;background:#f9fafb;text-align:center;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">${rodape ?? `Você recebeu este e-mail porque uma ação foi solicitada na sua conta ${BRAND_NAME}. Se não foi você, pode ignorar.`}</p>
+              <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">${BRAND_NAME} é um produto da <a href="https://aw3s.com.br" style="color:#6b7280;font-weight:700;text-decoration:none;">AW3S</a></p>
             </td>
           </tr>
         </table>
