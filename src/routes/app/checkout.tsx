@@ -355,7 +355,7 @@ function CheckoutPage() {
                         <span className="font-display text-2xl font-bold">{formatBRL(plano?.preco_cents ?? 0)}/mês</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        implementação combinada à parte com a nossa equipe (Pix ou parcelado)
+                        implementação combinada à parte com a nossa equipe
                       </div>
                     </div>
                     <Button

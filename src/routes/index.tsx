@@ -667,7 +667,7 @@ function Pricing({ onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | 
     <section id="planos" className="px-5 md:px-8 py-24 md:py-28">
       <div className="mx-auto max-w-6xl">
         <SectionTitle eyebrow="Planos" title={<>Quanto mais <span className="text-grad">cresce</span>, mais <span className="text-grad">economiza</span>.</>} />
-        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Nossa equipe configura tudo pra você: implementação única de R$ 499, no Pix ou parcelada, combinada na reunião. Depois, só a mensalidade do plano escolhido.</p>
+        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Nossa equipe configura tudo pra você. A implementação é apresentada na reunião; depois, só a mensalidade do plano escolhido.</p>
         <div className="mt-12 grid md:grid-cols-3 gap-5 items-stretch">
           {plans.map((pl) => (
             <div
