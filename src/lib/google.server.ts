@@ -339,17 +339,23 @@ export async function horariosLivresEmpresa(
     const dia0 = base + d * 864e5;
     const semana = new Date(dia0 + 12 * 3600_000).getUTCDay(); // meio-dia SP ≈ 15h UTC: mesmo dia da semana
     if (opts.dias && !opts.dias.has(semana)) continue;
-    diasComJanela++;
     const [hIni, hFim] = opts.porDia?.get(semana) ?? [ini, fim]; // faixa própria do dia (ex.: sábado só de manhã)
+    // Rótulo com (hoje)/(amanhã) para a IA não errar a referência (2026-11-24)
+    const rotulo = new Date(dia0 + 12 * 3600_000).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit" })
+      + (d === 0 ? " (hoje)" : d === 1 ? " (amanhã)" : "");
+    let livresNoDia = 0;
     for (let t = dia0 + hIni * 3600_000; t + dur <= dia0 + hFim * 3600_000; t += dur) {
       if (t < agora || ocupado(t, t + dur)) continue;
       const iso = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "-03:00");
       livres.push({
         inicio: iso(t), fim: iso(t + dur),
-        dia: new Date(t).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit" }),
+        dia: rotulo,
         hora: new Date(t).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
       });
+      livresNoDia++;
     }
+    // Só conta o dia se ainda tem horário livre: às 21h, "hoje" não entra e a lista traz amanhã e o dia seguinte
+    if (livresNoDia > 0) diasComJanela++;
   }
   return livres;
 }
