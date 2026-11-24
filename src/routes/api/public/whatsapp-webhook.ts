@@ -435,6 +435,23 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             }
           }
 
+          // Roteador de especialistas (2026-11-24): sem especialistas ativos não faz nada; a Katia (prospecção) tem trilha própria.
+          if (!iscaPendente) {
+            try {
+              const { carregarEspecialistas, rotearEspecialista, blocoEspecialista, registrarEspecialista, GERAL } = await import("@/lib/specialists.server");
+              const especialistas = await carregarEspecialistas(supabaseAdmin, companyId);
+              if (especialistas.length) {
+                const { data: cardEsp } = await (supabaseAdmin as any)
+                  .from("crm_cards").select("especialista_atual").eq("company_id", companyId).eq("numero", number).maybeSingle();
+                const atual = (cardEsp?.especialista_atual as string | null) ?? null;
+                const escolhido = await rotearEspecialista({ especialistas, atual, historico, texto: text });
+                const esp = especialistas.find((e) => e.nome === escolhido);
+                if (esp) system += blocoEspecialista(esp, !!(cfg as any)?.handoff_aviso);
+                void registrarEspecialista(supabaseAdmin, companyId, number, atual, esp ? esp.nome : GERAL, text);
+              }
+            } catch (e: any) { console.error("[especialistas]", e?.message); }
+          }
+
           const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
             { role: "system", content: system },
             ...historico.map((m) => ({

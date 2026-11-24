@@ -207,10 +207,16 @@ function AgentePage() {
             <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0 mb-4">
               {[["modelo","Modelo IA"],["negocio","Negócio"],["produtos","Produtos"],["ofertas","Ofertas"],["vendas","Vendas"],
                 ["suporte","Suporte"],["posvenda","Pós-venda"],["personalidade","Personalidade"],
-                ["agendamento","Agendamento"],["regras","Regras"]].map(([k,l]) => (
+                ["agendamento","Agendamento"],["regras","Regras"],
+                // Especialistas: em teste, só para a equipe AW3S (super admin); depois vira complemento de plano
+                ...(ctx.isSuperAdmin ? [["especialistas","Especialistas"]] : [])].map(([k,l]) => (
                 <TabsTrigger key={k} value={k} className="text-sm">{l}</TabsTrigger>
               ))}
             </TabsList>
+
+            <TabsContent value="especialistas" className="space-y-3">
+              {companyId && ctx.isSuperAdmin && <EspecialistasTab companyId={companyId} />}
+            </TabsContent>
 
             <TabsContent value="modelo" className="space-y-3">
               <Section title="Cérebro da IA" icon={<Sparkles className="size-3.5" />}>
@@ -568,5 +574,101 @@ function SliderRow({ label, v, on, max = 100, unit = "" }: { label: string; v: n
       </div>
       <Slider value={[v]} max={max} step={1} onValueChange={([x]) => on(x)} />
     </div>
+  );
+}
+
+// Especialistas (2026-11-24): o agente continua sendo uma pessoa só; a cada mensagem o roteador escolhe o
+// especialista do assunto e junta as instruções e o conhecimento dele ao prompt (src/lib/specialists.server.ts).
+type Especialista = {
+  id: string; nome: string; quando_usar: string; instrucoes: string; conhecimento: string;
+  passar_para_humano: boolean; ativo: boolean; ordem: number;
+};
+
+function EspecialistasTab({ companyId }: { companyId: string }) {
+  const [lista, setLista] = useState<Especialista[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [indisponivel, setIndisponivel] = useState(false);
+  const [salvando, setSalvando] = useState<string | null>(null);
+
+  async function carregar() {
+    const { data, error } = await (supabase as any)
+      .from("agent_specialist").select("*").eq("company_id", companyId).order("ordem", { ascending: true });
+    setIndisponivel(!!error);
+    setLista((data ?? []) as Especialista[]);
+    setCarregando(false);
+  }
+  useEffect(() => { void carregar(); }, [companyId]);
+
+  function editar(id: string, patch: Partial<Especialista>) {
+    setLista((ls) => ls.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+  async function novo() {
+    const { error } = await (supabase as any).from("agent_specialist").insert({
+      company_id: companyId, nome: "Novo especialista", ordem: lista.length,
+    });
+    if (error) return toast.error(error.message);
+    carregar();
+  }
+  async function salvar(e: Especialista) {
+    if (!e.nome.trim()) return toast.error("Dê um nome ao especialista.");
+    setSalvando(e.id);
+    const { id, ...resto } = e as any;
+    delete resto.company_id; delete resto.created_at;
+    const { error } = await (supabase as any).from("agent_specialist")
+      .update({ ...resto, nome: e.nome.trim(), updated_at: new Date().toISOString() }).eq("id", id);
+    setSalvando(null);
+    if (error) return toast.error(error.message);
+    toast.success(`${e.nome} salvo`);
+  }
+  async function apagar(e: Especialista) {
+    if (!confirm(`Apagar o especialista "${e.nome}"?`)) return;
+    const { error } = await (supabase as any).from("agent_specialist").delete().eq("id", e.id);
+    if (error) return toast.error(error.message);
+    carregar();
+  }
+
+  if (carregando) return <div className="grid place-items-center h-24 text-muted-foreground"><Loader2 className="animate-spin" /></div>;
+  if (indisponivel) {
+    return (
+      <Section title="Especialistas">
+        <p className="text-sm text-muted-foreground">Este recurso ainda está sendo ativado. Fale com o suporte.</p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Especialistas">
+      <p className="text-sm text-muted-foreground">
+        Seu agente continua sendo uma pessoa só para o cliente. A cada mensagem, ele identifica o assunto
+        (ex.: vendas, financeiro, suporte, projetos) e usa as instruções e o conhecimento do especialista certo.
+        Sem especialistas, ele responde só com a configuração geral.
+      </p>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={novo}><Plus className="size-4 mr-1" />Novo especialista</Button>
+      </div>
+      {lista.length === 0 && <div className="text-sm text-muted-foreground py-4 text-center">Nenhum especialista ainda.</div>}
+      <div className="space-y-3">
+        {lista.map((e) => (
+          <div key={e.id} className="rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Input value={e.nome} onChange={(ev) => editar(e.id, { nome: ev.target.value })} placeholder="Nome (ex.: Financeiro)" className="font-semibold" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                Ativo <Switch checked={e.ativo} onCheckedChange={(v) => editar(e.id, { ativo: v })} />
+              </div>
+              <button onClick={() => apagar(e)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Apagar"><Trash2 className="size-4" /></button>
+            </div>
+            <Area label="Quando usar (que assuntos levam a este especialista)" value={e.quando_usar} onChange={(v) => editar(e.id, { quando_usar: v })} rows={2} />
+            <Area label="Como agir neste assunto (postura e passo a passo)" value={e.instrucoes} onChange={(v) => editar(e.id, { instrucoes: v })} rows={4} />
+            <Area label="Conhecimento (a única fonte que ele pode usar: regras, prazos, links, respostas)" value={e.conhecimento} onChange={(v) => editar(e.id, { conhecimento: v })} rows={5} />
+            <Toggle label="Sem a resposta, passar para um humano (precisa do aviso de handoff ligado)" v={e.passar_para_humano} on={(v) => editar(e.id, { passar_para_humano: v })} />
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => salvar(e)} disabled={salvando === e.id}>
+                {salvando === e.id ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Save className="size-4 mr-1.5" />} Salvar
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
   );
 }
