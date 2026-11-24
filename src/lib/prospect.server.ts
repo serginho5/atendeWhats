@@ -41,7 +41,15 @@ async function checarLimite(admin: any, companyId: string, body: any, autor: "pr
     .not("texto", "like", "[imagem]%").gte("created_at", inicioDoDiaSP())
     .order("created_at", { ascending: false }).limit(500);
   // conta CONTATOS, não mensagens: um reforço em 3 blocos é 1 reforço
-  const hoje = [...new Set(((linhas ?? []) as any[]).map((m) => m.numero))];
+  let hoje = [...new Set(((linhas ?? []) as any[]).map((m) => m.numero))];
+  // Primeiro contato = número que NÃO tinha conversa antes de hoje. Continuação com quem já foi abordado em outro dia
+  // (ex.: "Gostaria de falar com uma pessoa" para o robô, entrega dos prints) não come a cota de aberturas (caso Vitória Amaro, 24/11).
+  if (autor === "prospeccao" && hoje.length) {
+    const { data: antigos } = await admin.from("mensagens")
+      .select("numero").eq("company_id", companyId).in("numero", hoje).lt("created_at", inicioDoDiaSP()).limit(1000);
+    const jaTinha = new Set(((antigos ?? []) as any[]).map((m) => m.numero));
+    hoje = hoje.filter((n) => !jaTinha.has(n));
+  }
   const limite = Math.max(1, Math.min(LIMITE_DIA_PADRAO, Number(body?.limite_dia) || LIMITE_DIA_PADRAO));
   const nome = autor === "reforco" ? "reforços" : "primeiros contatos";
   if ((hoje?.length ?? 0) >= limite) throw new ProspectError(`limite de ${limite} ${nome} por dia atingido`, 429, "limite_dia");
