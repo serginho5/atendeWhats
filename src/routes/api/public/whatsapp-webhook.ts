@@ -575,6 +575,30 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                     await sendEmail(ev.convidado, subject, html);
                   } catch (e: any) { console.error("[agendar e-mail]", e?.message); }
                 }
+                // Avisa o responsável no WhatsApp (2026-11-24): o Google não avisa o dono da agenda. Não trava a resposta.
+                void (async () => {
+                  try {
+                    const { notificarAgendamento } = await import("@/lib/handoff.server");
+                    await notificarAgendamento({
+                      instanceName,
+                      companyId,
+                      cfg,
+                      numero: number,
+                      nomeContato: cardRow?.nome || pushName || null,
+                      quando: new Date(agendar.inicio).toLocaleString("pt-BR", {
+                        timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                      }),
+                      titulo: agendar.titulo,
+                      email: ev.convidado,
+                      meetLink: ev.meetLink,
+                      primeiraMensagem,
+                      historico: [
+                        ...historico.map((m: any) => ({ direcao: m.direcao, texto: m.texto })),
+                        { direcao: "entrada", texto: text },
+                      ],
+                    });
+                  } catch (e: any) { console.error("[agendamento aviso]", e?.message); }
+                })();
                 // com e-mail (2026-11-20): o Google manda o convite; a confirmação já pede para conferir se chegou
                 confirmacaoAgenda = ev.convidado
                   ? `Prontinho! Reunião marcada para ${quando}, pelo Google Meet${ev.meetLink ? ` (${ev.meetLink})` : ""}. Acabei de enviar o convite para ${ev.convidado}. Confere se chegou?`

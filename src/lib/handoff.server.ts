@@ -99,3 +99,64 @@ export async function notificarHandoff(params: {
     void emitWebhook(companyId, "lead.handoff", { numero, contato_nome: nomeContato ?? null, motivo, etapa: etapa ?? null, resumo });
   } catch {}
 }
+
+// Aviso de reunião marcada (2026-11-24): o evento nasce na agenda do próprio responsável, e o Google
+// não manda e-mail para o dono da agenda — no teste real ninguém da AW3S ficou sabendo. Agora o
+// responsável (telefone_transferencia) recebe no WhatsApp, pelo número da empresa, os dados da reunião.
+// Não pausa o contato: a IA segue atendendo normalmente.
+export async function notificarAgendamento(params: {
+  instanceName: string;
+  companyId: string;
+  cfg: any;
+  numero: string;
+  nomeContato?: string | null;
+  quando: string;
+  titulo: string;
+  email?: string | null;
+  meetLink?: string | null;
+  primeiraMensagem?: string | null;
+  historico: Msg[];
+}) {
+  const destino = soDigitosTelefone(params.cfg?.telefone_transferencia);
+  if (!destino) return;
+  if (mesmoTelefone(destino, params.numero)) return; // o próprio responsável marcando: não avisa a si mesmo
+
+  let resumo = "";
+  try {
+    const { lovableAiChat } = await import("@/lib/lovable-ai.server");
+    const linhas = params.historico.slice(-30).map((m) => `${m.direcao === "entrada" ? "Cliente" : "Atendente"}: ${m.texto}`);
+    resumo = (await lovableAiChat(
+      [
+        {
+          role: "system",
+          content:
+            "Você prepara um vendedor para uma reunião marcada pelo WhatsApp. Responda em português, no máximo 4 linhas curtas, " +
+            "sem saudação, neste formato:\nNegócio: ...\nComo atende hoje / dor: ...\nO que quer: ...\nObservações: ...",
+        },
+        { role: "user", content: linhas.join("\n") },
+      ],
+      "google/gemini-flash-lite-latest",
+    )).trim();
+  } catch (e: any) {
+    console.error("[agendamento resumo]", e?.message);
+  }
+
+  const texto = [
+    `📅 *Reunião marcada* (${params.cfg?.nome_agente || "IA"})`,
+    `*Quando:* ${params.quando}`,
+    `*Cliente:* ${params.nomeContato || "sem nome"} · +${params.numero}`,
+    params.email ? `*E-mail:* ${params.email}` : "",
+    params.meetLink ? `*Meet:* ${params.meetLink}` : "",
+    params.primeiraMensagem ? `*Chegou com:* "${params.primeiraMensagem.replace(/\s+/g, " ").slice(0, 160)}"` : "",
+    `*Assunto:* ${params.titulo}`,
+    resumo ? `\n*Resumo:*\n${resumo}` : "",
+    `\nO evento já está na sua Google Agenda. A IA continua atendendo este contato.`,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const { evoSendText } = await import("@/lib/evolution.server");
+    await evoSendText(params.instanceName, destino, texto);
+  } catch (e: any) {
+    console.error("[agendamento aviso]", e?.message);
+  }
+}
