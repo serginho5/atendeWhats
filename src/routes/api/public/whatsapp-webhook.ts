@@ -375,6 +375,44 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
 
 
           const responderEmPartes = cfg?.responder_em_partes ?? true;
+
+          // Horários livres de verdade (2026-11-24): consultados uma vez e entregues à IA — vale para a Sofia,
+          // para os agentes dos clientes (agendamento ativo) e para a Katia (prospecção). Antes só a Katia via a agenda.
+          let livresTexto: string | null = null;
+          const querAgenda = !!googleIntegration?.conectado && (!!(cfg as any)?.agendamento_ativo || !!iscaPendente);
+          if (querAgenda) {
+            try {
+              const { parseJanelaAgendamento, duracaoMinutos, antecedenciaMinutos } = await import("@/lib/ai-prompt");
+              const { horariosLivresEmpresa } = await import("@/lib/google.server");
+              const j = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
+              const duracaoMin = iscaPendente ? 30 : duracaoMinutos((cfg as any)?.duracao_padrao);
+              const antecedenciaMin = iscaPendente ? 60 : antecedenciaMinutos((cfg as any)?.antecedencia_min);
+              const livres = await horariosLivresEmpresa(supabaseAdmin, companyId, { ...j, duracaoMin, antecedenciaMin, quantosDias: 2 });
+              const porDia: Record<string, string[]> = {};
+              for (const h of livres) (porDia[h.dia] ||= []).push(`${h.hora} (${h.inicio})`);
+              livresTexto = Object.keys(porDia).length
+                ? Object.entries(porDia).map(([d, hs]) => `- ${d}: ${hs.join(", ")}`).join("\n")
+                : "- nenhum horário livre nos próximos dias da agenda: pergunte o dia de preferência e diga que a equipe confirma o horário";
+            } catch (e: any) { console.error("[agenda horarios]", e?.message); }
+          }
+
+          // Primeira mensagem do contato: mostra de onde ele veio (vídeo, site, indicação…) mesmo em conversa longa
+          let primeiraMensagem: string | null = null;
+          if (!iscaPendente) {
+            try {
+              const { data: primeira } = await supabaseAdmin
+                .from("mensagens")
+                .select("texto")
+                .eq("company_id", companyId)
+                .eq("numero", number)
+                .eq("direcao", "entrada")
+                .order("created_at", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              primeiraMensagem = ((primeira as any)?.texto as string | undefined)?.trim() || null;
+            } catch {}
+          }
+
           let system = buildSystemPrompt(cfg ?? {}, {
             responderEmPartes,
             estagioAtual,
@@ -382,23 +420,18 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             produtos,
             stages: stages.map((s) => ({ nome: s.nome, tipo: s.tipo })),
             googleConectado: !!googleIntegration?.conectado,
+            horariosLivres: livresTexto,
+            primeiraMensagem,
+            semBlocoAgenda: !!iscaPendente,
           });
           if (iscaPendente) {
             const { instrucaoIsca } = await import("@/lib/prospect.server");
             system += instrucaoIsca(iscaPendente);
             // Trilhas Atende+ (2026-11-20) e site (2026-11-21): a Katia consulta a agenda de verdade antes de sugerir horário de reunião
-            if (googleIntegration?.conectado) {
-              try {
-                const { parseJanelaAgendamento } = await import("@/lib/ai-prompt");
-                const { horariosLivresEmpresa } = await import("@/lib/google.server");
-                const j = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
-                const livres = await horariosLivresEmpresa(supabaseAdmin, companyId, { ...j, duracaoMin: 30, antecedenciaMin: 60, quantosDias: 2 });
-                const porDia: Record<string, string[]> = {};
-                for (const h of livres) (porDia[h.dia] ||= []).push(`${h.hora} (${h.inicio})`);
-                system += `\n\nHORÁRIOS LIVRES DE VERDADE na agenda do Sérgio (blocos de 30 min; consultado agora, use só estes):\n` +
-                  (Object.keys(porDia).length ? Object.entries(porDia).map(([d, hs]) => `- ${d}: ${hs.join(", ")}`).join("\n") : "- nenhum horário livre hoje nem amanhã: peça um dia de preferência e diga que o Sérgio confirma") +
-                  `\nPara marcar, use o horário de início exato entre parênteses e termine 30 min depois.`;
-              } catch (e: any) { console.error("[atende+ horarios]", e?.message); }
+            if (livresTexto) {
+              system += `\n\nHORÁRIOS LIVRES DE VERDADE na agenda do Sérgio (blocos de 30 min; consultado agora, use só estes):\n` +
+                livresTexto.replace("pergunte o dia de preferência e diga que a equipe confirma o horário", "peça um dia de preferência e diga que o Sérgio confirma") +
+                `\nPara marcar, use o horário de início exato entre parênteses e termine 30 min depois.`;
             }
           }
 
@@ -494,6 +527,24 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                   descricao: `Agendado via WhatsApp — ${pushName || number} (+${number})${agendar.email ? ` · ${agendar.email}` : ""}`,
                   convidado: agendar.email || null,
                 });
+                // E-mail próprio de confirmação (2026-11-24), além do convite do Google — best-effort, não trava a resposta
+                if (ev.convidado) {
+                  try {
+                    const { renderBookingConfirmationEmail } = await import("@/lib/email/templates");
+                    const { sendEmail } = await import("@/lib/email/send");
+                    const quandoLongo = new Date(agendar.inicio).toLocaleString("pt-BR", {
+                      timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit",
+                    });
+                    const { subject, html } = renderBookingConfirmationEmail({
+                      empresa: (cfg as any)?.nome_empresa || "nossa equipe",
+                      nome: cardRow?.nome || pushName || null,
+                      quando: quandoLongo,
+                      meetLink: ev.meetLink,
+                      titulo: agendar.titulo,
+                    });
+                    await sendEmail(ev.convidado, subject, html);
+                  } catch (e: any) { console.error("[agendar e-mail]", e?.message); }
+                }
                 // com e-mail (2026-11-20): o Google manda o convite; a confirmação já pede para conferir se chegou
                 confirmacaoAgenda = ev.convidado
                   ? `Prontinho! Reunião marcada para ${quando}, pelo Google Meet${ev.meetLink ? ` (${ev.meetLink})` : ""}. Acabei de enviar o convite para ${ev.convidado}. Confere se chegou?`

@@ -7,7 +7,7 @@ const BRAND_GREEN = "#22C55E";
 const BRAND_GREEN_DARK = "#15924A";
 const LOGO_URL = "https://atendemaisempresas.com.br/logo-mascot.svg";
 
-function shell(title: string, bodyHtml: string) {
+function shell(title: string, bodyHtml: string, rodape?: string) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head><meta charSet="utf-8" /><title>${title}</title></head>
@@ -29,7 +29,7 @@ function shell(title: string, bodyHtml: string) {
           </tr>
           <tr>
             <td style="padding:20px 32px;background:#f9fafb;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">Você recebeu este e-mail porque uma ação foi solicitada na sua conta ${BRAND_NAME}. Se não foi você, pode ignorar.</p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">${rodape ?? `Você recebeu este e-mail porque uma ação foi solicitada na sua conta ${BRAND_NAME}. Se não foi você, pode ignorar.`}</p>
             </td>
           </tr>
         </table>
@@ -197,4 +197,26 @@ export function renderInternalAlertEmail(opts: {
       </div>
     </body></html>`,
   };
+}
+
+// Confirmação de reunião/agendamento marcado pela IA no WhatsApp (2026-11-24): sai junto com o convite do
+// Google Agenda, para a pessoa ter a confirmação mesmo se o convite cair no spam.
+export function renderBookingConfirmationEmail(opts: {
+  empresa: string; nome: string | null; quando: string; meetLink: string | null; titulo: string;
+}): { subject: string; html: string } {
+  const esc = (t: string) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
+  const empresa = esc(opts.empresa);
+  const ola = opts.nome ? `Olá, ${esc(opts.nome)}!` : "Olá!";
+  const meet = opts.meetLink
+    ? `<p style="margin:0 0 20px;text-align:center;"><a href="${esc(opts.meetLink)}" style="display:inline-block;background:${BRAND_GREEN};color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px;">Entrar no Google Meet</a></p>`
+    : "";
+  const html = shell(`Agendamento confirmado — ${empresa}`, `
+    <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Agendamento confirmado ✅</h1>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">${ola} Seu horário com a <b>${empresa}</b> está confirmado:</p>
+    <p style="margin:0 0 6px;font-size:13px;color:#6b7280;">${esc(opts.titulo)}</p>
+    <p style="margin:0 0 20px;font-size:18px;font-weight:800;color:#111827;">${esc(opts.quando)}</p>
+    ${meet}
+    <p style="margin:0;font-size:13px;color:#6b7280;">Você também recebeu o convite do Google Agenda. Se precisar remarcar, é só responder no WhatsApp.</p>
+  `, `Você recebeu este e-mail porque marcou um horário com a ${empresa} pelo WhatsApp.`);
+  return { subject: `Confirmado: ${opts.titulo} — ${opts.quando}`, html };
 }

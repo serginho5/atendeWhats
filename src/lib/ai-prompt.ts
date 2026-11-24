@@ -192,6 +192,12 @@ export function buildSystemPrompt(
     produtos?: ProdutoBrief[];
     stages?: StageBrief[];
     googleConectado?: boolean;
+    // Horários livres de verdade da agenda (já formatados pelo webhook). null = não deu para consultar.
+    horariosLivres?: string | null;
+    // Primeira mensagem que o contato mandou: mostra de onde ele veio (vídeo, site, indicação…)
+    primeiraMensagem?: string | null;
+    // Conversa de prospecção (Katia): o bloco de agenda vem da própria trilha, não daqui
+    semBlocoAgenda?: boolean;
   },
 ): string {
   const partes = opts?.responderEmPartes ?? c.responder_em_partes ?? true;
@@ -263,6 +269,10 @@ export function buildSystemPrompt(
       : "Se o cliente pedir atendimento humano ou for algo sensível, diga educadamente que vai chamar alguém do time.",
     opts?.resumoContato ? `Contexto do contato: ${opts.resumoContato}` : "",
     opts?.estagioAtual ? `Estágio atual no CRM: ${opts.estagioAtual}.` : "",
+    opts?.primeiraMensagem
+      ? `PRIMEIRA MENSAGEM QUE ESTE CONTATO MANDOU (mostra de onde ele veio; use para escolher o cenário certo, se houver cenários por origem acima):
+"""${opts.primeiraMensagem.slice(0, 400)}"""`
+      : "",
     `MÉTODO DE ATENDIMENTO (siga sempre):
 1. Cumprimente com naturalidade só na PRIMEIRA mensagem da conversa. Depois NÃO repita saudação.
 2. Antes de oferecer qualquer coisa, ENTENDA a necessidade do cliente. Faça UMA pergunta por vez (nunca várias juntas).
@@ -292,24 +302,33 @@ Se uma frase só já resolve, use UMA parte e pronto (sem o marcador). Nunca mai
     blocos.push(`FORMATO DA RESPOSTA: uma mensagem só, curta e natural.`);
   }
 
-  if (c.agendamento_ativo && opts?.googleConectado) {
-    const nowIso = new Date().toISOString();
-    const segunda = proximaSegunda();
+  if (c.agendamento_ativo && opts?.googleConectado && !opts?.semBlocoAgenda) {
+    // 2026-11-24: antes havia uma "próxima segunda-feira" fixa aqui, e a IA só oferecia segunda.
+    // Agora ela recebe os horários livres reais (mesma lógica da Katia) e segue o passo a passo abaixo.
+    const agora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const lista = opts.horariosLivres;
     blocos.push(
       `AGENDAMENTO REAL (Google Agenda conectado):
-Hoje é ${nowIso} (UTC, fuso America/Sao_Paulo). A próxima segunda-feira é ${segunda.br} (${segunda.iso}) — use ESSA data pronta ` +
-        `quando for sugerir "segunda-feira" ao cliente, nunca calcule a data de cabeça.
-Quando for OFERECER um horário (antes do cliente confirmar), respeite estritamente a janela configurada acima em "Janelas disponíveis" ` +
-        `(ex.: se disser "segundas das 9h às 17h", só ofereça segunda-feira, com opções entre 09:00 e 17:00 — nunca outro dia ou horário fora disso).
-Quando o cliente CONFIRMAR um horário específico (dia + hora) para um serviço agendável, ` +
-        `na MESMA resposta, em uma nova linha, escreva exatamente:
-[AGENDAR: AAAA-MM-DDTHH:MM | AAAA-MM-DDTHH:MM | título curto]
-A primeira data é o início, a segunda é o fim (use ${c.duracao_padrao || "30 min"} se o cliente não disser). ` +
-        `Use o fuso -03:00 nos horários (ex.: 2026-06-20T15:00:00-03:00). Esse marcador é interno e NÃO aparece pro cliente. ` +
-        `Só emita o marcador quando o cliente confirmou claramente. Nunca invente horários que o cliente não disse.
-IMPORTANTE: nessa mesma mensagem, NÃO diga que já está confirmado/marcado — o agendamento ainda vai ser verificado e criado. ` +
-        `Diga algo como "beleza, vou confirmar esse horário aqui" (tom de "estou processando", não de "já está pronto"). ` +
-        `O sistema, logo em seguida, envia automaticamente a confirmação real (ou avisa se não deu certo) — inclusive o link do Google Meet quando houver. ` +
+Agora é ${agora} (horário de Brasília). Nunca calcule datas de cabeça: use só as datas da lista abaixo.
+` +
+        (lista
+          ? `HORÁRIOS LIVRES DE VERDADE (consultados agora na agenda, blocos de ${duracaoMinutos(c.duracao_padrao)} min; ofereça SÓ estes):
+${lista}
+COMO AGENDAR (siga esta ordem, uma etapa por mensagem):
+1. Quando o cliente topar agendar, pergunte a preferência entre os DOIS PRIMEIROS DIAS da lista: se o primeiro for hoje, "Você prefere hoje ou amanhã?"; senão, use o nome dos dias (ex.: "Você prefere segunda ou terça?"). Nunca ofereça um dia que não está na lista.
+2. Com o dia escolhido, sugira UM horário livre desse dia ("Tenho às 15h, fica bom?"). Se não servir, ofereça outro da lista. Nunca invente horário fora da lista.
+3. Com o horário escolhido, peça o e-mail da pessoa para mandar a confirmação com o dia e o horário. Se ela não quiser passar e-mail, agende assim mesmo.
+4. Com o horário (e o e-mail) confirmados, diga só algo como "Perfeito, vou marcar aqui 😊" e, na MESMA resposta, em uma nova linha, escreva exatamente:
+[AGENDAR: INÍCIO | FIM | título curto | EMAIL]
+INÍCIO = o horário de início exato que está entre parênteses na lista; FIM = ${duracaoMinutos(c.duracao_padrao)} min depois; EMAIL = o e-mail que a pessoa passou (deixe vazio se ela não passou).`
+          : `Não consegui consultar os horários livres agora. Pergunte o dia e o período de preferência do cliente e ofereça horários dentro de "Janelas disponíveis" acima. ` +
+            `Quando o cliente confirmar dia e hora, peça o e-mail para mandar a confirmação e, na MESMA resposta da confirmação, em uma nova linha, escreva exatamente:
+[AGENDAR: INÍCIO | FIM | título curto | EMAIL]
+(INÍCIO e FIM com o fuso -03:00, ex.: 2026-06-20T15:00:00-03:00; FIM = ${duracaoMinutos(c.duracao_padrao)} min depois; EMAIL vazio se não tiver).`) +
+        `
+Esse marcador é interno e NÃO aparece pro cliente. Só emita o marcador quando o cliente confirmou claramente.
+IMPORTANTE: nessa mesma mensagem, NÃO diga que já está confirmado/marcado — o sistema confere a agenda, cria o compromisso e manda em seguida ` +
+        `a confirmação real com dia, horário e link do Google Meet (e o convite por e-mail, quando houver e-mail), ou avisa se o horário não deu certo. ` +
         `Portanto NUNCA invente ou escreva você mesmo um link de reunião ou uma frase definitiva de "confirmado".`,
     );
   }
@@ -332,6 +351,25 @@ com o valor total combinado da venda em reais (só números e ponto decimal, sem
   );
 
   return blocos.filter(Boolean).join("\n\n");
+}
+
+// "30 min", "1h", "1h30", "45" → minutos (padrão 30)
+export function duracaoMinutos(txt?: string | null): number {
+  const t = String(txt || "").toLowerCase();
+  const h = t.match(/(\d+)\s*h(?:ora)?s?\s*(\d+)?/);
+  if (h) return Math.min(240, Math.max(15, Number(h[1]) * 60 + Number(h[2] || 0)));
+  const m = t.match(/(\d+)/);
+  return m ? Math.min(240, Math.max(15, Number(m[1]))) : 30;
+}
+
+// "2 horas", "30 min", "1 dia" → minutos (padrão 60)
+export function antecedenciaMinutos(txt?: string | null): number {
+  const t = String(txt || "").toLowerCase();
+  const n = Number(t.match(/(\d+)/)?.[1] ?? NaN);
+  if (!Number.isFinite(n)) return 60;
+  if (/dia/.test(t)) return n * 1440;
+  if (/h/.test(t)) return n * 60;
+  return n;
 }
 
 // Calcula a data (America/Sao_Paulo) da próxima segunda-feira a partir de agora.
