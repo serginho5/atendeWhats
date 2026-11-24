@@ -13,7 +13,8 @@ import {
 import { createCheckoutCompany } from "@/lib/checkout.functions";
 import { useServerFn } from "@tanstack/react-start";
 
-const ATIVACAO_CENTS = 49900; // R$ 499,00 — implementação, pagamento único
+// A implementação (setup) é combinada na reunião e paga direto à AW3S (Pix ou
+// parcelado), fora da Kiwify. Aqui só se assina a mensalidade recorrente.
 
 type Search = { plano?: string };
 
@@ -183,13 +184,13 @@ function CheckoutPage() {
 
   const headerBadge = isSuspenso
     ? { icon: <Lock className="size-3.5 mr-1.5" />, text: "Pagamento pendente" }
-    : { icon: <Sparkles className="size-3.5 mr-1.5" />, text: "Implementação incluída" };
+    : { icon: <Sparkles className="size-3.5 mr-1.5" />, text: "Assinatura mensal" };
   const headerTitle = isSuspenso
     ? "Regularize seu pagamento"
-    : "Ative sua IA e comece a vender";
+    : "Ative a assinatura do seu plano";
   const headerSubtitle = isSuspenso
     ? "Seus dados ficam aqui esperando. Assim que o pagamento for confirmado, seu acesso é liberado automaticamente."
-    : "Um pagamento único de implementação e sua IA já começa a atender. Depois disso, só a mensalidade do plano escolhido.";
+    : "A mensalidade é cobrada todo mês pela Kiwify (cartão, Pix ou boleto). A implementação é combinada à parte, na reunião com a nossa equipe.";
 
   return (
     <div className="min-h-screen bg-background">
@@ -346,15 +347,15 @@ function CheckoutPage() {
                       ))}
                     </ul>
                     <p className="text-xs text-muted-foreground mb-6 italic">
-                      Isso normalmente levaria uma agência ou freelancer semanas de trabalho e custaria bem mais caro. Nossa equipe entrega pronto em até 48h.
+                      Nossa equipe entrega pronto em até 48h.
                     </p>
                     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-6 space-y-1">
                       <div className="flex items-baseline justify-center gap-2">
-                        <span className="text-xs uppercase tracking-wider text-muted-foreground">Implementação única</span>
-                        <span className="font-display text-2xl font-bold">{formatBRL(ATIVACAO_CENTS)}</span>
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground">Plano {plano?.nome}</span>
+                        <span className="font-display text-2xl font-bold">{formatBRL(plano?.preco_cents ?? 0)}/mês</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        depois, mensalidade do plano <b className="text-foreground">{plano?.nome}</b>: {formatBRL(plano?.preco_cents ?? 0)}/mês
+                        implementação combinada à parte com a nossa equipe (Pix ou parcelado)
                       </div>
                     </div>
                     <Button
@@ -364,7 +365,7 @@ function CheckoutPage() {
                       className="w-full md:w-auto min-w-[280px] bg-gradient-brand text-primary-foreground hover:opacity-90 font-semibold"
                     >
                       {creating ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Sparkles className="size-4 mr-2" />}
-                      Ativar minha IA agora — {formatBRL(ATIVACAO_CENTS)}
+                      {plano?.checkout_url ? `Assinar ${plano?.nome} agora` : "Plano sem checkout configurado"}
                     </Button>
                   </>
                 )}

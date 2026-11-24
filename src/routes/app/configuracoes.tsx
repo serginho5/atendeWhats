@@ -406,7 +406,7 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
   const trialEnd = sub?.trial_ends_at ?? company?.trial_ate ?? null;
   const days = trialEnd ? trialDaysLeft(trialEnd) : 0;
   // "trial" (status_cobranca) é o modelo legado, ainda válido pra empresas antigas.
-  // Empresas novas nascem "pendente" (aguardando o pagamento da implementação) — mesmo
+  // Empresas novas nascem "pendente" (aguardando a mensalidade) — mesmo
   // com sub.status="trialing" (isso é só bookkeeping técnico, ver checkout.functions.ts).
   const isTrial = status === "trial";
   const isPendingPayment = status === "pendente" || status === "suspenso" || status === "checkout_pending";
@@ -462,7 +462,7 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
         {isPendingPayment && (
           <div className="rounded-md p-3 text-sm flex items-start gap-2 bg-destructive/10 text-destructive">
             <AlertTriangle className="size-4 mt-0.5" />
-            <div>Finalize o pagamento da implementação para ativar sua IA.</div>
+            <div>Regularize a mensalidade para ativar sua IA.</div>
           </div>
         )}
       </Card>
@@ -473,8 +473,8 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
           {isActive
             ? "Você pode trocar de plano ou atualizar o cartão a qualquer momento."
             : isPendingPayment
-              ? "Finalize a implementação (pagamento único) para ativar sua IA."
-              : "Cadastre seu cartão para ativar o plano. Pode cancelar quando quiser."}
+              ? "Regularize a mensalidade do plano para ativar sua IA."
+              : "Assine o plano para ativar sua IA. Pode cancelar quando quiser."}
         </p>
         {sub?.payment_method_brand && (
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -485,7 +485,7 @@ function PlanoCard({ company, sub }: { company: any; sub: any }) {
           <Button asChild>
             <Link to="/app/checkout" search={{ plano: sub?.plan?.nome?.toLowerCase() } as any}>
               <CreditCard className="size-4 mr-1.5" />
-              {isActive ? "Trocar de plano" : isPendingPayment ? "Finalizar ativação" : "Cadastrar cartão e ativar"}
+              {isActive ? "Trocar de plano" : isPendingPayment ? "Regularizar mensalidade" : "Assinar plano"}
             </Link>
           </Button>
         </div>

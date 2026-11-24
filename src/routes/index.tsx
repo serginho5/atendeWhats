@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Conecte seu número de WhatsApp em 2 minutos. A IA do Atende+Empresas responde, qualifica e move cada lead no funil automaticamente. Implementação completa por R$ 499.",
+          "A IA do Atende+Empresas responde seu WhatsApp, qualifica e move cada lead no funil automaticamente. Nossa equipe configura tudo pra você em até 48h.",
       },
       { property: "og:title", content: `${brand.name} — WhatsApp + IA + CRM no automático` },
       {
@@ -62,30 +62,15 @@ function Landing() {
     window.location.href = path;
   }
 
-  // Checkout é direto na Kiwify — a conta só nasce depois que o pagamento é
-  // confirmado (ver webhook em src/routes/api/public/billing/webhook.ts), não
-  // existe mais tela de auto-cadastro antes de pagar.
-  const [checkoutUrls, setCheckoutUrls] = useState<Record<string, string>>({});
-  useEffect(() => {
-    supabase.from("plan").select("slug, checkout_url").eq("ativo", true).then(({ data }) => {
-      const map: Record<string, string> = {};
-      (data ?? []).forEach((p: any) => { if (p.checkout_url) map[p.slug] = p.checkout_url; });
-      setCheckoutUrls(map);
-    });
-  }, []);
-
+  // O setup (implementação) é combinado na reunião e pago direto à AW3S
+  // (Pix ou parcelado). A Kiwify cuida só da mensalidade recorrente: o link
+  // do plano é enviado depois da reunião e a conta nasce quando a assinatura
+  // é aprovada (ver webhook em src/routes/api/public/billing/webhook.ts).
   function selectPlan(slug: string) {
-    if (slug === "business") {
-      window.open(supportWhatsappUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const url = checkoutUrls[slug];
-    if (url) {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } else {
-      // Checkout ainda não configurado pro plano — fallback pra falar direto com suporte.
-      window.open(supportWhatsappUrl, "_blank", "noopener,noreferrer");
-    }
+    const nomes: Record<string, string> = { starter: "Starter", pro: "Pro", business: "Business" };
+    const plano = nomes[slug] ? ` (plano ${nomes[slug]})` : "";
+    const texto = `Olá! Quero agendar uma reunião para configurarem a IA do Atende+ no meu WhatsApp${plano}.`;
+    window.open(`${supportWhatsappUrl}?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
   }
 
   useScrollReveal();
@@ -376,7 +361,7 @@ function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos")
               className="group inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-black font-bold text-[16px] btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >
-              Ativar minha IA — R$ 499
+              Quero minha IA configurada
               <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
             </button>
             <button
@@ -388,8 +373,8 @@ function Hero({ onCta }: { onCta: (p: "/entrar" | "/demo/dashboard" | "#planos")
           </div>
 
           <ul className="mt-7 flex flex-wrap justify-center lg:justify-start gap-x-5 gap-y-2 text-sm text-white/65 font-medium">
-            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Implementação em até 48h</li>
-            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Conecta em 2 minutos</li>
+            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Nossa equipe configura tudo</li>
+            <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Pronto em até 48h</li>
             <li className="flex items-center gap-1.5"><Check className="size-4 text-[#25D366]" /> Cancele quando quiser</li>
           </ul>
         </div>
@@ -641,7 +626,7 @@ function Pricing({ onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | 
         "CRM Kanban + IA automática",
         "Suporte por email",
       ],
-      cta: "Ativar por R$ 499",
+      cta: "Agendar reunião",
     },
     {
       slug: "pro",
@@ -658,7 +643,7 @@ function Pricing({ onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | 
         "Suporte prioritário",
       ],
       highlight: true,
-      cta: "Quero o Pro — R$ 499",
+      cta: "Quero o Pro",
       badge: "Economize 2 meses no anual",
     },
     {
@@ -682,7 +667,7 @@ function Pricing({ onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashboard" | 
     <section id="planos" className="px-5 md:px-8 py-24 md:py-28">
       <div className="mx-auto max-w-6xl">
         <SectionTitle eyebrow="Planos" title={<>Quanto mais <span className="text-grad">cresce</span>, mais <span className="text-grad">economiza</span>.</>} />
-        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Implementação única de R$ 499 em qualquer plano — nossa equipe configura tudo pra você. Depois, só a mensalidade escolhida.</p>
+        <p className="text-center text-white/55 max-w-2xl mx-auto mt-4 text-[15px]">Nossa equipe configura tudo pra você: implementação única de R$ 499, no Pix ou parcelada, combinada na reunião. Depois, só a mensalidade do plano escolhido.</p>
         <div className="mt-12 grid md:grid-cols-3 gap-5 items-stretch">
           {plans.map((pl) => (
             <div
@@ -832,7 +817,7 @@ function FinalCta({ onCta, onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashb
             Pare de perder venda no <span className="text-grad">"oi, sumiu"</span>.
           </h2>
           <p className="mt-6 text-white/70 max-w-xl mx-auto text-lg sm:text-xl">
-            Implementação completa por R$ 499 pra ver a IA atendendo seu WhatsApp e fechando lead sozinha.
+            Nossa equipe deixa a IA atendendo seu WhatsApp e fechando lead sozinha em até 48h. Agende uma reunião e veja como funciona.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <button
@@ -840,7 +825,7 @@ function FinalCta({ onCta, onSelectPlan }: { onCta: (p: "/entrar" | "/demo/dashb
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-black font-bold text-base sm:text-lg btn-glow"
               style={{ background: "linear-gradient(135deg,#25D366,#16a34a)" }}
             >
-              Ativar minha IA agora <ArrowRight className="size-5" />
+              Agendar minha reunião <ArrowRight className="size-5" />
             </button>
             <button onClick={() => onCta("/demo/dashboard")} className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl glass-strong text-white hover:bg-white/10 text-base sm:text-lg font-medium">
               <Play className="size-4" /> Ver demonstração
