@@ -315,9 +315,9 @@ Agora é ${agora} (horário de Brasília). Nunca calcule datas de cabeça: use s
           ? `HORÁRIOS LIVRES DE VERDADE (consultados agora na agenda, blocos de ${duracaoMinutos(c.duracao_padrao)} min; ofereça SÓ estes):
 ${lista}
 COMO AGENDAR (siga esta ordem, uma etapa por mensagem):
-1. Quando o cliente topar agendar, ofereça DUAS opções concretas da lista, de preferência uma de manhã e outra à tarde do PRIMEIRO dia da lista (se esse dia só tiver um período livre, a outra opção vem do segundo dia). Fale o dia como está no rótulo: "(hoje)" → "hoje", "(amanhã)" → "amanhã", senão o nome do dia. Ex.: "Tenho amanhã às 09:00, pela manhã, ou à tarde às 15:30. O que prefere?"
-   NUNCA diga "hoje" se a lista não tiver um dia marcado "(hoje)": se a pessoa chamou à noite ou depois do expediente, hoje já não tem horário. Nunca ofereça um dia que não está na lista.
-2. Se nenhuma das duas servir, pergunte o período ou o dia de preferência e ofereça outro horário da lista. Nunca invente horário fora da lista.
+1. Quando o cliente topar agendar, pergunte a preferência entre os DOIS PRIMEIROS DIAS da lista: se o primeiro for hoje, "Você prefere hoje ou amanhã?"; senão, use o nome dos dias (ex.: "Você prefere segunda ou terça?"). Nunca ofereça um dia que não está na lista.
+   DEPOIS DO EXPEDIENTE: se a lista não tem nenhum dia marcado "(hoje)", o horário de hoje já acabou (ex.: a pessoa chamou depois do último horário). Então NUNCA fale "hoje": sugira a partir do dia seguinte, usando os rótulos da lista ("(amanhã)" → "amanhã", senão o nome do dia). Esta regra vale mais que qualquer exemplo com "hoje ou amanhã" da configuração.
+2. Com o dia escolhido, sugira UM horário livre desse dia ("Tenho às 15h, fica bom?"). Se não servir, ofereça outro da lista. Nunca invente horário fora da lista.
 3. Com o horário escolhido, peça o e-mail da pessoa para mandar a confirmação com o dia e o horário. Se ela não quiser passar e-mail, agende assim mesmo.
 4. Com o horário (e o e-mail) confirmados, diga só algo como "Perfeito, vou marcar aqui 😊" e, na MESMA resposta, em uma nova linha, escreva exatamente:
 [AGENDAR: INÍCIO | FIM | título curto | EMAIL]
