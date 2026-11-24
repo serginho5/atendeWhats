@@ -499,7 +499,12 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           // Cliente já vê "digitando…" enquanto a IA pensa (sem esperar — ver nota no envio).
-          void evoSendPresence(instanceName, number, "composing", 4000);
+          // "digitando…" contínuo enquanto a IA pensa (2026-11-24): antes ficava só 4 s e a IA leva 8-10 s,
+          // então o cliente via o chat parado. A Evolution segura cada pedido pelo `delay`, por isso o laço renova sozinho.
+          let iaPensando = true;
+          void (async () => {
+            while (iaPensando) await evoSendPresence(instanceName, number, "composing", 3000);
+          })();
           const aiStartedAt = Date.now();
           let rawReply = "";
           try {
@@ -511,6 +516,8 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             });
           } catch (e: any) {
             console.error("[ai]", e?.message);
+          } finally {
+            iaPensando = false;
           }
 
           // [MOSTRAR_PREVIA]: a IA decidiu mostrar os prints da isca guardada (enviados depois das partes de texto)
@@ -524,11 +531,17 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           // Sempre gera uma mensagem de resultado real pro cliente — nunca falha em silêncio,
           // pra evitar o agente "confirmar" um agendamento que não foi criado de verdade.
           let confirmacaoAgenda: string | null = null;
-          if (agendar && googleIntegration?.conectado) {
-            const quando = new Date(agendar.inicio).toLocaleString("pt-BR", {
-              timeZone: "America/Sao_Paulo",
-              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-            });
+          // Marcador repetido (2026-11-24): no teste, a IA reemitiu [AGENDAR] do mesmo horário quando a cliente
+          // disse "chegou sim" e o sistema respondeu "horário ocupado" — ocupado pela própria reunião dela.
+          // Se esta conversa já recebeu a confirmação desse mesmo horário, o marcador é ignorado.
+          const quandoAg = agendar
+            ? new Date(agendar.inicio).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+            : "";
+          const jaMarcado = !!agendar && historico.some((m: any) =>
+            m.direcao === "saida" && typeof m.texto === "string" && m.texto.startsWith("Prontinho!") && m.texto.includes(`para ${quandoAg}`));
+          if (jaMarcado) console.warn("[agendar] marcador repetido ignorado", companyId, number, quandoAg);
+          if (agendar && !jaMarcado && googleIntegration?.conectado) {
+            const quando = quandoAg;
             try {
               const { parseJanelaAgendamento, validaHorarioAgendamento } = await import("@/lib/ai-prompt");
               const janela = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
@@ -588,13 +601,13 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             try {
               // A Evolution segura a requisição de presença pelo `delay` inteiro, então
               // NÃO dá await nela (antes isso dobrava o tempo de "digitando" de cada parte).
-              // Na 1ª parte, desconta o tempo que o cliente já passou vendo "digitando…" durante a IA.
-              let typingMs = Math.min(2500, 800 + Math.floor(part.length * 25));
-              if (i === 0) typingMs = Math.max(0, typingMs - (Date.now() - aiStartedAt));
-              if (typingMs > 0) {
-                void evoSendPresence(instanceName, number, "composing", typingMs);
-                await new Promise((r) => setTimeout(r, typingMs));
-              }
+              // Toda bolha tem o seu "digitando…" (2026-11-24): na 1ª, mais curto porque o cliente já viu
+              // "digitando…" enquanto a IA pensava; nas outras, proporcional ao tamanho do texto.
+              const typingMs = i === 0
+                ? Math.min(1500, 600 + Math.floor(part.length * 10))
+                : Math.min(3500, 1200 + Math.floor(part.length * 30));
+              void evoSendPresence(instanceName, number, "composing", typingMs);
+              await new Promise((r) => setTimeout(r, typingMs));
               await evoSendText(instanceName, number, part);
               await supabaseAdmin.from("mensagens").insert({
                 company_id: companyId,
