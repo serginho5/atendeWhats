@@ -409,6 +409,28 @@ export async function detectarParceiro(companyId: string, numero: string, textoR
   const m = ((data ?? []) as { texto: string }[]).find((x) => PARCEIRO_RE.test(x.texto || ""));
   return m ? { escritorio: nomeEscritorio(m.texto) } : null;
 }
+// Abertura FIXA da trilha de parceiro (usuário, 2026-11-26): no teste a IA mandou só 2 das 3 bolhas e chamou pelo
+// nome do cadastro ("Erika"); a 3ª, com a iniciativa, só saiu depois que o parceiro respondeu. Agora sai sempre igual,
+// sem IA, quando chega a mensagem do botão do e-mail (e não sai de novo se já saiu nas últimas 6 h).
+export function aberturaParceiro(escritorio: string | null) {
+  const doEsc = escritorio ? `do escritório ${escritorio}` : "do escritório";
+  return [
+    `Olá! Que bom falar com vocês ${doEsc} 😊`,
+    "Eu sou a Katia, assistente da AW3S, e cuido da agenda do Sérgio.",
+    "Vou te ajudar a encontrar o melhor horário para a nossa conversa sobre a parceria. Vocês têm preferência de dia ou horário? Me conta que eu consulto a agenda do Sérgio e já te sugiro as opções 📅",
+  ];
+}
+export async function abrirParceiro(companyId: string, userId: string, instanceName: string, numero: string, contatoNome: string | null, escritorio: string | null, textoRecebido: string) {
+  if (!PARCEIRO_RE.test(textoRecebido || "")) return false;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const desde = new Date(Date.now() - 6 * 3600_000).toISOString();
+  const { data } = await (supabaseAdmin as any).from("mensagens").select("id").eq("company_id", companyId).eq("numero", numero)
+    .eq("direcao", "saida").ilike("texto", "%cuido da agenda do Sérgio%").gte("created_at", desde).limit(1);
+  if (data?.length) return false;
+  await enviarComoKatia(companyId, userId, instanceName, numero, contatoNome, aberturaParceiro(escritorio), "ia");
+  return true;
+}
+
 export function instrucaoParceiro(escritorio: string | null) {
   const doEsc = escritorio ? `do escritório ${escritorio}` : "do escritório";
   const titulo = `Parceria AW3S: conversa com ${escritorio || "o escritório"}`;
@@ -432,7 +454,7 @@ Quem está falando é ${escritorio ? `do escritório de contabilidade "${escrito
 - NÃO ofereça site, prévia, prints nem atendente; NUNCA use o marcador [MOSTRAR_PREVIA]; não pergunte se a agenda dele está aberta a novos clientes.
 
 ### ROTEIRO (siga a ordem; use as frases de exemplo com naturalidade, adaptando ao que ele disser)
-1. PRIMEIRA RESPOSTA, em 3 bolhas (separe com |||):
+1. PRIMEIRA RESPOSTA (o sistema já manda sozinho estas 3 bolhas quando chega a mensagem do botão; se você vir que já foram enviadas, NÃO repita: siga do passo 2), em 3 bolhas (separe com |||):
    "Olá! Que bom falar com vocês ${doEsc} 😊" ||| "Eu sou a Katia, assistente da AW3S, e cuido da agenda do Sérgio." ||| "Vou te ajudar a encontrar o melhor horário para a nossa conversa sobre a parceria. Vocês têm preferência de dia ou horário? Me conta que eu consulto a agenda do Sérgio e já te sugiro as opções 📅"
 2. QUANDO ELE RESPONDER (qualquer resposta, até "certo"): acolha e mostre que está agindo. Ex.: "Que bom ter vocês aqui! Deixa eu dar uma olhadinha na agenda do Sérgio 😊" ||| e já ofereça, com entusiasmo, UM horário real da lista de HORÁRIOS LIVRES que combine com a preferência dele (ou o mais próximo, se ele não tiver preferência): "Olha que bom: temos um horário livre hoje às 14h! Posso confirmar para você?". Se o dia que ele pediu não tiver horário, diga com leveza e ofereça a melhor alternativa. Nunca invente horário fora da lista.
 3. QUANDO ELE CONFIRMAR O HORÁRIO: "Perfeito! 🙌" ||| "Nossa conversa é pelo Google Meet e tem duração de 15 minutos, que é o padrão do nosso sistema, mas temos uma margem de segurança para atender vocês com calma e tirar todas as dúvidas sobre a parceria." ||| "Para eu te enviar o convite, qual é o seu melhor e-mail?"

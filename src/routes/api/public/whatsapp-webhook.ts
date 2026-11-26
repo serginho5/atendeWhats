@@ -386,7 +386,16 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             const { detectarParceiro, PARCEIRO_RE } = await import("@/lib/prospect.server");
             if (!iscaPendente || PARCEIRO_RE.test(text || "")) parceiroTrilha = await detectarParceiro(companyId, number, text);
           } catch (e: any) { console.error("[parceiro contador]", e?.message); }
-          if (parceiroTrilha) iscaPendente = null;
+          if (parceiroTrilha) {
+            iscaPendente = null;
+            try {
+              const { abrirParceiro } = await import("@/lib/prospect.server");
+              if (await abrirParceiro(companyId, userId, instanceName, number, pushName ?? null, parceiroTrilha.escritorio, text)) {
+                await upsertCard(supabaseAdmin, companyId, userId, number, pushName, text, stages);
+                return new Response("parceiro-abertura", { status: 200 });
+              }
+            } catch (e: any) { console.error("[parceiro abertura]", e?.message); }
+          }
 
           const historico = (histDesc ?? []).slice().reverse();
 
@@ -555,7 +564,17 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const mostrarPrevia = !!iscaPendente && new RegExp(MARCADOR_PREVIA.source, "i").test(rawReply);
           rawReply = rawReply.replace(MARCADOR_PREVIA, "").trim();
           const { parts, stage, agendar, valor: valorGanho, handoff } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
-          const finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
+          let finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
+          // Trilha de parceiro: nunca chamar pelo nome do cadastro/WhatsApp (o número pode estar salvo com outro nome),
+          // a não ser que a própria pessoa tenha dito o nome na conversa.
+          if (parceiroTrilha) {
+            const disse = [...historico.filter((m: any) => m.direcao === "entrada").map((m: any) => String(m.texto || "")), text].join(" ").toLowerCase();
+            const nomes = [cardRow?.nome, pushName].map((n) => String(n || "").trim().split(/\s+/)[0]).filter((n) => n.length >= 3 && !disse.includes(n.toLowerCase()));
+            for (const n of [...new Set(nomes)]) {
+              const e = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              finalParts = finalParts.map((p) => p.replace(new RegExp(`,\\s*${e}(?=[!?.,\\s]|$)`, "gi"), "").replace(new RegExp(`\\b${e}\\b,?\\s*`, "gi"), "").replace(/\s{2,}/g, " ").trim()).filter(Boolean);
+            }
+          }
 
           // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...].
           // Sempre gera uma mensagem de resultado real pro cliente — nunca falha em silêncio,
