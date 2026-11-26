@@ -272,6 +272,16 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           const bufferSec = Math.max(0, Math.min(20, Number(cfg?.segundos_buffer ?? 8)));
+          // "online" + "digitando…" desde o primeiro segundo (usuário, 2026-11-26): antes o contato ficava a espera
+          // inteira (buffer) sem sinal nenhum e achava que a mensagem não ia chegar. A Evolution segura o pedido pelo
+          // `delay`; sem await. O laço da IA (mais abaixo) continua o "digitando…" enquanto ela pensa.
+          {
+            const { evoSendPresence } = await import("@/lib/evolution.server");
+            void (async () => {
+              await evoSendPresence(instanceName, number, "available", 0);
+              if (bufferSec > 0) await evoSendPresence(instanceName, number, "composing", bufferSec * 1000);
+            })();
+          }
           if (bufferSec > 0) {
             await new Promise((r) => setTimeout(r, bufferSec * 1000));
           }
