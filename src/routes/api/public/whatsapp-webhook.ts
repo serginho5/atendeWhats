@@ -369,13 +369,14 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           // Trilha "parceiro contador" (2026-11-26): o escritório chegou pelo botão do e-mail da parceria AW3S
+          // Tem prioridade sobre a prévia de site: um contato que também é lead de prospecção (caso do teste em 26/11,
+          // número cadastrado como lead "Erika") e escreve "parceria AW3S" segue a trilha de parceiro, não a do site.
           let parceiroTrilha: { escritorio: string | null } | null = null;
-          if (!iscaPendente) {
-            try {
-              const { detectarParceiro } = await import("@/lib/prospect.server");
-              parceiroTrilha = await detectarParceiro(companyId, number, text);
-            } catch (e: any) { console.error("[parceiro contador]", e?.message); }
-          }
+          try {
+            const { detectarParceiro, PARCEIRO_RE } = await import("@/lib/prospect.server");
+            if (!iscaPendente || PARCEIRO_RE.test(text || "")) parceiroTrilha = await detectarParceiro(companyId, number, text);
+          } catch (e: any) { console.error("[parceiro contador]", e?.message); }
+          if (parceiroTrilha) iscaPendente = null;
 
           const historico = (histDesc ?? []).slice().reverse();
 
