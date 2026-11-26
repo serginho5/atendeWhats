@@ -186,15 +186,26 @@ export async function evoSendText(instanceName: string, number: string, text: st
   });
 }
 
+// LID do contato (2026-11-26): o WhatsApp passou a identificar parte das conversas por um código interno
+// ("19035479634155@lid", addressingMode 'lid'). O texto chega mesmo mandando para o telefone, mas o "digitando…"
+// mandado para o telefone NÃO aparece numa conversa em LID (caso do teste do 0775). O webhook guarda aqui o LID
+// de cada número que chega, e a presença vai para o LID (e também para o telefone, por garantia).
+const lidPorNumero = new Map<string, string>();
+export function registrarLid(numero: string, lid: string | null | undefined) {
+  if (numero && lid && /@lid$/.test(lid) && lidPorNumero.get(numero) !== lid) { lidPorNumero.set(numero, lid); console.log(`[lid] ${numero} -> ${lid}`) }
+}
 export async function evoSendPresence(instanceName: string, number: string, presence: "composing" | "paused" | "available", delayMs = 1500) {
-  try {
-    await evo(`/chat/sendPresence/${encodeURIComponent(instanceName)}`, {
-      method: "POST",
-      json: { number, presence, delay: delayMs },
-    });
-  } catch {
-    // best-effort
-  }
+  const alvos = [lidPorNumero.get(number), number].filter(Boolean) as string[];
+  await Promise.all(alvos.map(async (alvo) => {
+    try {
+      await evo(`/chat/sendPresence/${encodeURIComponent(instanceName)}`, {
+        method: "POST",
+        json: { number: alvo, presence, delay: delayMs },
+      });
+    } catch {
+      // best-effort
+    }
+  }));
 }
 
 export async function evoLogout(instanceName: string) {

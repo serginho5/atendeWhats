@@ -54,6 +54,15 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           const number = remoteJid.split("@")[0];
+          // guarda o LID do contato (se veio) para o "digitando…" aparecer em conversas no modo LID
+          try {
+            const lid = [key.remoteJidAlt, key.senderLid, key.participantAlt, data?.senderLid, data?.remoteJidAlt, remoteJid]
+              .find((j: any) => typeof j === "string" && j.endsWith("@lid"));
+            if (lid) {
+              const { registrarLid } = await import("@/lib/evolution.server");
+              registrarLid(number, lid);
+            }
+          } catch {}
           const pushName: string | undefined = data?.pushName;
           const msg = data?.message ?? {};
           let text: string =
