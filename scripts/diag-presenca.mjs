@@ -12,7 +12,7 @@ try {
   const lista = await (await fetch(U + "/instance/fetchInstances", { headers: h })).json()
   const insts = (Array.isArray(lista) ? lista : []).map((i) => ({ nome: i.name || i.instance?.instanceName, status: i.connectionStatus || i.instance?.status, dono: i.ownerJid || i.instance?.owner || "" }))
   for (const i of insts) console.log("instância:", i.nome, i.status, i.dono)
-  const alvo = insts.find((i) => String(i.dono).includes(fim)) || insts[0]
+  const alvo = insts.find((i) => String(i.dono).includes(fim) && i.status === "open") || insts.find((i) => String(i.dono).includes(fim)) || insts[0]
   if (!alvo) { console.log("nenhuma instância"); process.exit(0) }
   console.log("\nTestando na instância", alvo.nome, "para", numero)
   console.log("config:", await ler(await fetch(U + "/settings/find/" + encodeURIComponent(alvo.nome), { headers: h })))
