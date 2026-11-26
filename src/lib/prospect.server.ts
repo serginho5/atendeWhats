@@ -378,15 +378,53 @@ function blocoAngulo(textos?: string[]) {
 }
 
 // Passo a passo da reunião, comum às duas trilhas (Atende+ e site)
-function comoMarcar(titulo: string) {
+function comoMarcar(titulo: string, duracao = "Nossas reuniões são pelo Google Meet e levam no máximo 30 minutos.") {
   return `COMO MARCAR A REUNIÃO (siga esta ordem, uma etapa por mensagem):
 1. Pergunte a preferência entre os DOIS PRÓXIMOS DIAS que têm horário na lista de HORÁRIOS LIVRES abaixo: "Você prefere hoje ou amanhã?" num dia útil; no fim de semana ou depois do expediente, use os dias da lista (ex.: "Você prefere segunda ou terça?"). Nunca ofereça um dia sem horário livre.
 2. Consulte os HORÁRIOS LIVRES DE VERDADE (lista abaixo, quando houver) e sugira UM horário do dia escolhido ("Tenho às 15h, fica bom?"). Se não servir, ofereça outro da lista. Nunca invente horário fora da lista.
-3. Quando a pessoa escolher, peça o e-mail dela para mandar o convite, e avise: "Nossas reuniões são pelo Google Meet e levam no máximo 30 minutos."
+3. Quando a pessoa escolher, peça o e-mail dela para mandar o convite, e avise: "${duracao}"
 4. Com o horário e o e-mail confirmados, diga só "Perfeito, vou marcar aqui 😊" e, na MESMA resposta, em uma nova linha, escreva exatamente:
    [AGENDAR: INÍCIO | FIM | ${titulo} | EMAIL]
    (INÍCIO = horário escolhido com -03:00, ex.: 2026-11-21T15:00:00-03:00; FIM = 30 min depois; EMAIL = o e-mail que a pessoa passou). Não diga que já está marcado: o sistema marca e manda a confirmação com o pedido para conferir se o convite chegou.
 5. Quando a pessoa confirmar que o convite chegou, agradeça, diga que o Sérgio, nosso gerente de projetos, estará na reunião, deixe o site https://aw3s.com.br e, na MESMA resposta, em uma nova linha, escreva [HANDOFF: reunião marcada]. Se o convite não chegou, peça para olhar o spam e confirmar o e-mail.`;
+}
+
+// ---- Trilha "parceiro contador" (máquina de vendas, 2026-11-26) ----
+// O escritório de contabilidade recebeu o e-mail da parceria por indicação, respondeu com interesse, recebeu o e-mail
+// "como funciona" e tocou no botão do WhatsApp, que chega com a mensagem pronta:
+//   "Olá, Katia! Sou do escritório X e quero agendar a conversa sobre a parceria AW3S."
+// Ele NÃO é cliente de site: a Katia só marca a conversa de 15 min com o Sérgio (Google Meet) e tira dúvidas simples.
+export const PARCEIRO_RE = /parceria\s+(?:da\s+|com\s+a\s+)?aw3s/i;
+const nomeEscritorio = (t: string) => (t.match(/escrit[óo]rio\s+(.+?)\s+e\s+quero/i)?.[1] || "").trim().slice(0, 80) || null;
+// Vale só na empresa que faz prospecção (a subconta da Katia) e por 14 dias desde a mensagem da parceria.
+export async function detectarParceiro(companyId: string, numero: string, textoRecebido: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const admin = supabaseAdmin as any;
+  const { data: prosp } = await admin.from("prospeccao_pendente").select("id").eq("company_id", companyId).limit(1);
+  if (!prosp?.length) return null;
+  if (PARCEIRO_RE.test(textoRecebido || "")) return { escritorio: nomeEscritorio(textoRecebido) };
+  const desde = new Date(Date.now() - 14 * 864e5).toISOString();
+  const { data } = await admin.from("mensagens").select("texto").eq("company_id", companyId).eq("numero", numero)
+    .eq("direcao", "entrada").ilike("texto", "%parceria%").gte("created_at", desde).order("created_at", { ascending: true }).limit(5);
+  const m = ((data ?? []) as { texto: string }[]).find((x) => PARCEIRO_RE.test(x.texto || ""));
+  return m ? { escritorio: nomeEscritorio(m.texto) } : null;
+}
+export function instrucaoParceiro(escritorio: string | null) {
+  const esc = escritorio || "o escritório";
+  return `
+
+## CONVERSA DE PARCERIA COM ESCRITÓRIO DE CONTABILIDADE (a regra mais importante desta conversa)
+Quem está falando é de ${escritorio ? `"${escritorio}", um escritório de contabilidade` : "um escritório de contabilidade"}. O Sérgio, nosso gerente de projetos, mandou por e-mail o convite para a PARCERIA POR INDICAÇÃO da AW3S; o escritório respondeu com interesse, recebeu o e-mail de "como funciona" e tocou no botão para falar com você e AGENDAR uma conversa com o Sérgio.
+- Ele NÃO é cliente de site. NÃO ofereça site, prévia, prints nem o atendente para ele, e NUNCA use o marcador [MOSTRAR_PREVIA]. Não pergunte se a agenda dele está aberta a novos clientes.
+- O seu objetivo é UM só: marcar a conversa de 15 minutos com o Sérgio pelo Google Meet, para tirar as dúvidas e ativar a parceria.
+- Primeira resposta: agradeça o contato, diga que é a Katia, assistente da AW3S que cuida da agenda do Sérgio, e já pergunte o dia ("Você prefere hoje ou amanhã?"). Ex.: "Olá! Que bom falar com vocês ${escritorio ? `do ${escritorio}` : "do escritório"} 😊 Aqui é a Katia, assistente da AW3S, eu cuido da agenda do Sérgio. Vamos marcar a conversa sobre a parceria? Você prefere hoje ou amanhã?"
+- Tom: cordial, profissional e curto (é um sócio de escritório). Uma ideia por mensagem e toda resposta termina com uma pergunta fácil.
+- O que você PODE dizer sobre a parceria (só isto, sem inventar): o escritório indica clientes que precisam de site, atendimento com IA no WhatsApp, sistema ou aplicativo; a AW3S conversa, apresenta a proposta, implanta e dá suporte, e o escritório não precisa vender nem acompanhar nada; a comissão é de 20% da implantação e 5% de cada mensalidade enquanto o cliente continuar, ou 10% nos projetos sob medida, paga por Pix até o dia 10 do mês seguinte ao pagamento do cliente; o parceiro recebe um código, o selo "Parceiro AW3S", um aplicativo próprio para indicar e acompanhar indicações e comissões, e um manual com os serviços.
+- Qualquer outra pergunta (contrato, termo, valores dos planos, casos específicos, impostos): diga com leveza que o Sérgio explica tudo na conversa e siga para marcar. NUNCA informe preço de planos nem prometa resultado.
+- Se ele disser que não tem mais interesse, agradeça, deixe o site https://aw3s.com.br e encerre. Se pedir para falar com uma pessoa agora ou reclamar, passe para o Sérgio com [HANDOFF: parceiro pediu atendimento].
+- Se perguntarem se você é um robô, não negue: diga que é a assistente virtual da AW3S e que a conversa é com o Sérgio.
+
+${comoMarcar(`Parceria AW3S: conversa com ${esc}`, "A conversa é pelo Google Meet e leva uns 15 minutos.")}`;
 }
 
 // Trilha do site (usuário, 2026-11-21): os prints são só uma prévia; o site completo o Sérgio apresenta na reunião.

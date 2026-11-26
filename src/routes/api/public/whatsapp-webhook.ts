@@ -368,6 +368,15 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.error("[isca pendente]", e?.message);
           }
 
+          // Trilha "parceiro contador" (2026-11-26): o escritório chegou pelo botão do e-mail da parceria AW3S
+          let parceiroTrilha: { escritorio: string | null } | null = null;
+          if (!iscaPendente) {
+            try {
+              const { detectarParceiro } = await import("@/lib/prospect.server");
+              parceiroTrilha = await detectarParceiro(companyId, number, text);
+            } catch (e: any) { console.error("[parceiro contador]", e?.message); }
+          }
+
           const historico = (histDesc ?? []).slice().reverse();
 
           const estagioAtual = cardRow?.status || stages[0]?.nome || "Conversas";
@@ -379,14 +388,14 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           // Horários livres de verdade (2026-11-24): consultados uma vez e entregues à IA — vale para a Sofia,
           // para os agentes dos clientes (agendamento ativo) e para a Katia (prospecção). Antes só a Katia via a agenda.
           let livresTexto: string | null = null;
-          const querAgenda = !!googleIntegration?.conectado && (!!(cfg as any)?.agendamento_ativo || !!iscaPendente);
+          const querAgenda = !!googleIntegration?.conectado && (!!(cfg as any)?.agendamento_ativo || !!iscaPendente || !!parceiroTrilha);
           if (querAgenda) {
             try {
               const { parseJanelaAgendamento, duracaoMinutos, antecedenciaMinutos } = await import("@/lib/ai-prompt");
               const { horariosLivresEmpresa } = await import("@/lib/google.server");
               const j = parseJanelaAgendamento((cfg as any)?.horarios_disponiveis);
-              const duracaoMin = iscaPendente ? 30 : duracaoMinutos((cfg as any)?.duracao_padrao);
-              const antecedenciaMin = iscaPendente ? 60 : antecedenciaMinutos((cfg as any)?.antecedencia_min);
+              const duracaoMin = iscaPendente || parceiroTrilha ? 30 : duracaoMinutos((cfg as any)?.duracao_padrao);
+              const antecedenciaMin = iscaPendente || parceiroTrilha ? 60 : antecedenciaMinutos((cfg as any)?.antecedencia_min);
               const livres = await horariosLivresEmpresa(supabaseAdmin, companyId, { ...j, duracaoMin, antecedenciaMin, quantosDias: 2 });
               const porDia: Record<string, string[]> = {};
               for (const h of livres) (porDia[h.dia] ||= []).push(`${h.hora} (${h.inicio})`);
@@ -422,7 +431,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             googleConectado: !!googleIntegration?.conectado,
             horariosLivres: livresTexto,
             primeiraMensagem,
-            semBlocoAgenda: !!iscaPendente,
+            semBlocoAgenda: !!iscaPendente || !!parceiroTrilha,
           });
           if (iscaPendente) {
             const { instrucaoIsca } = await import("@/lib/prospect.server");
@@ -435,8 +444,18 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             }
           }
 
+          if (parceiroTrilha) {
+            const { instrucaoParceiro } = await import("@/lib/prospect.server");
+            system += instrucaoParceiro(parceiroTrilha.escritorio);
+            if (livresTexto) {
+              system += `\n\nHORÁRIOS LIVRES DE VERDADE na agenda do Sérgio (blocos de 30 min; consultado agora, use só estes):\n` +
+                livresTexto.replace("pergunte o dia de preferência e diga que a equipe confirma o horário", "peça um dia de preferência e diga que o Sérgio confirma") +
+                `\nPara marcar, use o horário de início exato entre parênteses e termine 30 min depois.`;
+            }
+          }
+
           // Roteador de especialistas (2026-11-24): sem especialistas ativos não faz nada; a Katia (prospecção) tem trilha própria.
-          if (!iscaPendente) {
+          if (!iscaPendente && !parceiroTrilha) {
             try {
               const { carregarEspecialistas, rotearEspecialista, blocoEspecialista, registrarEspecialista, GERAL } = await import("@/lib/specialists.server");
               const especialistas = await carregarEspecialistas(supabaseAdmin, companyId);
