@@ -530,6 +530,10 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
             console.warn("[credits] créditos esgotados — IA não respondeu", companyId);
             return new Response("no_credits", { status: 200 });
           }
+          // aviso de consumo (80% e limite) para o responsável da empresa; não trava a resposta
+          if (!vitalicia) void (async () => {
+            try { const { avisarConsumoCreditos } = await import("@/lib/handoff.server"); await avisarConsumoCreditos({ instanceName, companyId, cfg }); } catch {}
+          })();
           const [throttleReason, plan] = await Promise.all([
             getAiThrottleReason(supabaseAdmin, companyId, number),
             getCompanyPlan(companyId),

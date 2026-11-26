@@ -160,3 +160,34 @@ export async function notificarAgendamento(params: {
     console.error("[agendamento aviso]", e?.message);
   }
 }
+
+// Aviso de consumo da IA (usuário, 2026-11-26): a proposta comercial promete aviso antes de acabar o limite.
+// Cada resposta da IA consome 1 crédito. Avisa o responsável (telefone_transferencia) UMA vez quando sobra 20% da
+// franquia do mês (80% usado) e quando o saldo zera. Pacote extra: +1.000 respostas por R$ 49, ou mudança de plano.
+export async function avisarConsumoCreditos(params: { instanceName: string; companyId: string; cfg: any }) {
+  try {
+    const destino = soDigitosTelefone(params.cfg?.telefone_transferencia);
+    if (!destino) return;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const [{ data: comp }, { data: sub }] = await Promise.all([
+      admin.from("company").select("creditos_saldo, creditos_resetam_em").eq("id", params.companyId).maybeSingle(),
+      admin.from("subscription").select("plan:plan(creditos_mensais, nome)").eq("company_id", params.companyId)
+        .in("status", ["active", "trialing", "past_due"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    const saldo = Number(comp?.creditos_saldo ?? -1);
+    const mensais = Number(sub?.plan?.creditos_mensais ?? 0);
+    const marco80 = mensais > 0 ? Math.floor(mensais * 0.2) : -1;
+    if (saldo !== 0 && saldo !== marco80) return;
+    const renova = comp?.creditos_resetam_em ? new Date(comp.creditos_resetam_em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : null;
+    const contato = "Fale com a AW3S para um pacote extra (+1.000 respostas por R$ 49) ou para mudar de plano: https://wa.me/5511994786204";
+    const texto = saldo === 0
+      ? [`🚨 *A IA atingiu o limite de respostas do mês*`, mensais ? `Foram usadas as ${mensais.toLocaleString("pt-BR")} respostas do plano.` : "", `A partir de agora a IA não responde novas mensagens${renova ? ` até a renovação em ${renova}` : " até a renovação"}.`, contato].filter(Boolean).join("\n")
+      : [`⚠️ *A IA já usou 80% das respostas do mês*`, `Restam ${saldo.toLocaleString("pt-BR")} de ${mensais.toLocaleString("pt-BR")} respostas${renova ? ` (renova em ${renova})` : ""}.`, `Para o atendimento não parar, ${contato.charAt(0).toLowerCase()}${contato.slice(1)}`].join("\n");
+    const { evoSendText } = await import("@/lib/evolution.server");
+    await evoSendText(params.instanceName, destino, texto);
+    console.log(`[creditos] aviso ${saldo === 0 ? "limite" : "80%"} para ${params.companyId}`);
+  } catch (e: any) {
+    console.error("[creditos aviso]", e?.message);
+  }
+}
