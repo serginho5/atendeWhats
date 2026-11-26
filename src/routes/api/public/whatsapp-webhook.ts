@@ -574,6 +574,10 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
               const e = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
               finalParts = finalParts.map((p) => p.replace(new RegExp(`,\\s*${e}(?=[!?.,\\s]|$)`, "gi"), "").replace(new RegExp(`\\b${e}\\b,?\\s*`, "gi"), "").replace(/\s{2,}/g, " ").trim()).filter(Boolean);
             }
+            // Rede de segurança do roteiro (teste de 26/11): a IA às vezes manda 2 das 3 bolhas e a da iniciativa fica de fora.
+            const tudo = finalParts.join(" ").toLowerCase();
+            if (!agendar && !handoff && /15 minutos/.test(tudo) && !/e-?mail/.test(tudo)) finalParts = [...finalParts, "Para eu te enviar o convite, qual é o seu melhor e-mail? 😊"];
+            if (/conduz daqui pra frente|conduz daqui para frente/.test(tudo) && !/ótimo dia|otimo dia/.test(tudo)) finalParts = [...finalParts, "Tenha um ótimo dia! 😊"];
           }
 
           // Cria evento no Google Agenda se a IA marcou [AGENDAR: ...].
