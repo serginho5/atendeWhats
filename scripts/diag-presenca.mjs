@@ -16,6 +16,15 @@ try {
   if (!alvo) { console.log("nenhuma instância"); process.exit(0) }
   console.log("\nTestando na instância", alvo.nome, "para", numero)
   console.log("config:", await ler(await fetch(U + "/settings/find/" + encodeURIComponent(alvo.nome), { headers: h })))
+  // "online": liga o alwaysOnline da instância (sem isso o WhatsApp muitas vezes não mostra o "digitando…")
+  if (process.argv.includes("online")) {
+    const atual = await (await fetch(U + "/settings/find/" + encodeURIComponent(alvo.nome), { headers: h })).json()
+    const corpo = { rejectCall: !!atual.rejectCall, msgCall: atual.msgCall || "", groupsIgnore: !!atual.groupsIgnore, alwaysOnline: true,
+      readMessages: !!atual.readMessages, readStatus: !!atual.readStatus, syncFullHistory: !!atual.syncFullHistory }
+    console.log("ligando alwaysOnline:", await ler(await fetch(U + "/settings/set/" + encodeURIComponent(alvo.nome), { method: "POST", headers: h, body: JSON.stringify(corpo) })))
+    console.log("config agora:", await ler(await fetch(U + "/settings/find/" + encodeURIComponent(alvo.nome), { headers: h })))
+    await new Promise((r) => setTimeout(r, 2000))
+  }
   const url = U + "/chat/sendPresence/" + encodeURIComponent(alvo.nome)
   console.log("formato v2 {number,presence,delay}:", await ler(await fetch(url, { method: "POST", headers: h, body: JSON.stringify({ number: numero, presence: "composing", delay: 4000 }) })))
   console.log("formato v1 {number,options}:", await ler(await fetch(url, { method: "POST", headers: h, body: JSON.stringify({ number: numero, options: { presence: "composing", delay: 4000 } }) })))
