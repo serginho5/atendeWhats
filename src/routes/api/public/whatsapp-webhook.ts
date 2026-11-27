@@ -484,6 +484,8 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           // Roteador de especialistas (2026-11-24): sem especialistas ativos não faz nada; a Katia (prospecção) tem trilha própria.
+          // Especialista de Projetos (2026-11-27): consulta a gestão da AW3S e pode abrir chamado (src/lib/gestao.server.ts).
+          let usarGestao = false;
           if (!iscaPendente && !parceiroTrilha) {
             try {
               const { carregarEspecialistas, rotearEspecialista, blocoEspecialista, registrarEspecialista, GERAL } = await import("@/lib/specialists.server");
@@ -495,6 +497,13 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
                 const escolhido = await rotearEspecialista({ especialistas, atual, historico, texto: text });
                 const esp = especialistas.find((e) => e.nome === escolhido);
                 if (esp) system += blocoEspecialista(esp, !!(cfg as any)?.handoff_aviso);
+                if (esp) {
+                  const { ehEspecialistaProjetos, gestaoConfigurada, consultarGestao, blocoGestao } = await import("@/lib/gestao.server");
+                  if (ehEspecialistaProjetos(esp.nome) && gestaoConfigurada()) {
+                    system += blocoGestao(await consultarGestao(number));
+                    usarGestao = true;
+                  }
+                }
                 void registrarEspecialista(supabaseAdmin, companyId, number, atual, esp ? esp.nome : GERAL, text);
               }
             } catch (e: any) { console.error("[especialistas]", e?.message); }
@@ -576,6 +585,16 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           const { MARCADOR_PREVIA } = await import("@/lib/prospect.server");
           const mostrarPrevia = !!iscaPendente && new RegExp(MARCADOR_PREVIA.source, "i").test(rawReply);
           rawReply = rawReply.replace(MARCADOR_PREVIA, "").trim();
+          // [CHAMADO: projeto | tipo | pedido]: a Sofia abriu um pedido na gestão; a confirmação com número e prazo vem do sistema
+          let confirmacoesChamado: string[] = [];
+          if (usarGestao && /\[CHAMADO:/i.test(rawReply)) {
+            try {
+              const { processarChamados } = await import("@/lib/gestao.server");
+              const r = await processarChamados(rawReply, number);
+              rawReply = r.texto;
+              confirmacoesChamado = r.confirmacoes;
+            } catch (e: any) { console.error("[gestao chamado]", e?.message); }
+          }
           const { parts, stage, agendar, valor: valorGanho, handoff } = parseAiOutput(rawReply, stages.map((s) => ({ nome: s.nome, tipo: s.tipo })));
           let finalParts = sanitizeAiParts(responderEmPartes ? parts : [parts.join(" ")]);
           // Trilha de parceiro: nunca chamar pelo nome do cadastro/WhatsApp (o número pode estar salvo com outro nome),
@@ -682,6 +701,7 @@ export const Route = createFileRoute("/api/public/whatsapp-webhook")({
           }
 
           if (confirmacaoAgenda) finalParts.push(confirmacaoAgenda);
+          for (const c of confirmacoesChamado) finalParts.push(c);
           const aiMs = Date.now() - aiStartedAt;
           const tBeforeSend = Date.now();
 
