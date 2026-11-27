@@ -20,7 +20,9 @@ export function RoutePendingComponent() {
   );
 }
 
-export function RouteErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+export function RouteErrorComponent({ error: erroBruto, reset }: { error: unknown; reset: () => void }) {
+  // TanStack Router 1.170+: o erro pode ser de qualquer tipo (não só Error)
+  const error = erroBruto instanceof Error ? erroBruto : new Error(String(erroBruto));
   console.error(error);
   const router = useRouter();
   useEffect(() => {

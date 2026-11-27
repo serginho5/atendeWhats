@@ -42,7 +42,9 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error: erroBruto, reset }: { error: unknown; reset: () => void }) {
+  // TanStack Router 1.170+: o erro pode ser de qualquer tipo (não só Error)
+  const error = erroBruto instanceof Error ? erroBruto : new Error(String(erroBruto));
   console.error(error);
   const router = useRouter();
   useEffect(() => {
